@@ -1,0 +1,16 @@
+{
+  "development": {
+    "username": "postgres",
+    "password": "stephano",
+    "database": "smidbi",
+    "host": "165.227.27.86",
+    "dialect": "postgres"    
+  },
+  "production": {
+    "username": "postgres",
+    "password": "stephano",
+    "database": "smidbi",
+    "host": "165.227.27.86",
+    "dialect": "postgres"
+  }
+}
