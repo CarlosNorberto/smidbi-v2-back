@@ -2,20 +2,17 @@ const md = require('../models');
 
 const getAllByUser = async (req, res) => {
     try {        
-        const { page = 1, limit = 10 } = req.params;        
+        const { page = 1, limit = 10, name = null } = req.query;        
         const offset = (page - 1) * limit;
         let where = {
             id_usuario: req.user.id,
             activo: true
         }
-        if (req.body){
-            const { name } = req.body;
-            if (name) {
-                where.nombre = {
-                    [md.Sequelize.Op.iLike]: `%${name}%`
-                };
-            }
-        }        
+        if (name) {
+            where.nombre = {
+                [md.Sequelize.Op.iLike]: `%${name}%`
+            };
+        }
         const empresas = await md.empresas.findAndCountAll({
             where: where,
             attributes: ['id', 'nombre', 'activo', 'descripcion', 'email'],

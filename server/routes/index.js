@@ -1,6 +1,7 @@
 const { sessionAuth } = require('../auth/middleware');
 const usuarios = require('../controllers/usuarios');
 const empresas = require('../controllers/empresas');
+const categorias = require('../controllers/categorias');
 const reportes = require('../controllers/reportes');
 
 module.exports=(app)=>{
@@ -9,9 +10,12 @@ module.exports=(app)=>{
     app.get(process.env.PREFIX_API + '/users/all', sessionAuth, usuarios.getAll);
 
     // EMPRESAS
-    app.post(process.env.PREFIX_API + '/companies/all/:page/:limit', sessionAuth, empresas.getAllByUser);
+    app.get(process.env.PREFIX_API + '/companies/all', sessionAuth, empresas.getAllByUser);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
+
+    // CATEGORIAS
+    app.get(process.env.PREFIX_API + '/categories/all/:company_id', sessionAuth, categorias.getAllByCompany);
 
     // REPORTES
     app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAllByUser);
