@@ -7,7 +7,7 @@ const LoginLocalStrategy = (app) => {
         usernameField: 'user',
     }, async (user_name, password, done) => {        
         try {
-            const user = await md.usuarios.findOne({ where: { usuario: user_name }, attributes: ['id', 'email', 'usuario', 'nombre', 'password', 'time_zone'] });
+            const user = await md.usuarios.scope('withRole').findOne({ where: { usuario: user_name }, attributes: ['id', 'email', 'usuario', 'nombre', 'password', 'time_zone'] });
             if (!user) {
                 return done(null, false, { message: 'Acceso denegado' });
             }
@@ -39,9 +39,11 @@ const LoginLocalStrategy = (app) => {
                     req.session.cookie.maxAge = null;
                 }
                 res.status(200).send({
+                    id: user.id,
                     user_name: user.usuario,
                     name: user.nombre,
                     time_zone: user.time_zone,
+                    role: user.role.rol,
                 });
             });
         })(req, res, next);

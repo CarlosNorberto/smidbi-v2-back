@@ -71,6 +71,14 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: DataTypes.NOW,
             allowNull: true
         },
+        fecha_ini: {
+            type: DataTypes.DATEONLY,
+            allowNull: true
+        },
+        fecha_fin: {
+            type: DataTypes.DATEONLY,
+            allowNull: true
+        },
         sesiones: {
             type: DataTypes.BIGINT,
             defaultValue: 0
@@ -187,14 +195,14 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     Reportes.associate = (models) => {
-        // Reportes.belongsTo(models.campanas, {
-        //     foreignKey: 'id_campana',
-        //     as: 'campana'
-        // });
-        // Reportes.belongsTo(models.plataformas, {
-        //     foreignKey: 'id_plataforma',
-        //     as: 'plataforma'
-        // });
+        Reportes.belongsTo(models.campanas, {
+            foreignKey: 'id_campana',
+            as: 'campana'
+        });
+        Reportes.belongsTo(models.plataformas, {
+            foreignKey: 'id_plataforma',
+            as: 'platform'
+        });
         // Reportes.belongsTo(models.objetivos, {
         //     foreignKey: 'id_objetivo',
         //     as: 'objetivo'
@@ -202,6 +210,39 @@ module.exports = (sequelize, DataTypes) => {
         Reportes.hasMany(models.reporte_dia, {
             foreignKey: 'id_reporte',
             as: 'reporte_dia'
+        });
+        Reportes.hasMany(models.reporte_objetivos_secundarios, {
+            foreignKey: 'id_reporte',
+            as: 'objetivos_secundarios'
+        });
+
+        // Scopes
+        Reportes.addScope('withCampaign', {
+            include: [
+                {
+                    model: models.campanas,
+                    as: 'campana',
+                    attributes: ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda'],
+                }
+            ]
+        });
+        Reportes.addScope('withPlatform', {
+            include: [
+                {
+                    model: models.plataformas,
+                    as: 'platform',
+                    attributes: ['id', 'plataforma', 'icono', 'code'],
+                }
+            ]
+        });
+        Reportes.addScope('withSecondaryObjectives', {
+            include: [
+                {
+                    model: models.reporte_objetivos_secundarios,
+                    as: 'objetivos_secundarios',
+                    attributes: ['id', 'id_objetivo', 'valor', 'activo'],
+                }
+            ]
         });
     };
 

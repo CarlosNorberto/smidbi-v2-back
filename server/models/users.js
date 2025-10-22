@@ -17,7 +17,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         password: {
             type: DataTypes.STRING(100),
-            allowNull: false
+            allowNull: true
         },
         activo: {
             type: DataTypes.BOOLEAN,
@@ -69,11 +69,30 @@ module.exports = (sequelize, DataTypes) => {
         phone: {
             type: DataTypes.STRING(30),
             allowNull: true
+        },
+        role_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true
         }
     }, {
         tableName: 'usuarios',
         timestamps: false
     });
+
+    Users.associate = (models) => {
+        Users.belongsTo(models.roles, { foreignKey: 'role_id', as: 'role' });
+
+        // Scopes
+        Users.addScope('withRole', {
+            include: [{
+                model: models.roles,
+                as: 'role',
+                attributes: ['rol', 'descripcion']
+            }]
+        });
+    }
+
+    
 
     Users.prototype.validPassword = function (password) {
         if (!this.password) return false;

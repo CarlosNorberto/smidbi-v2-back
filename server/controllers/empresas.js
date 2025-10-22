@@ -1,11 +1,33 @@
 const md = require('../models');
 
-const getAllByUser = async (req, res) => {
+const getById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const empresa = await md.empresas.findOne({
+            where: {
+                id: id,
+                activo: true
+            },
+            attributes: ['id', 'nombre', 'descripcion', 'email'],
+        });
+        if (!empresa) {
+            return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+        res.status(200).json(empresa);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener la empresa: ${error.message}` });
+    }
+};
+
+const getAllByUsers = async (req, res) => {
     try {        
+        const { user_ids } = req.params;
         const { page = 1, limit = 10, name = null } = req.query;        
-        const offset = (page - 1) * limit;
+        const offset = (page - 1) * limit;        
         let where = {
-            id_usuario: req.user.id,
+            id_usuario: {
+                [md.Sequelize.Op.in]: user_ids.split(',')
+            },
             activo: true
         }
         if (name) {
@@ -13,12 +35,12 @@ const getAllByUser = async (req, res) => {
                 [md.Sequelize.Op.iLike]: `%${name}%`
             };
         }
-        const empresas = await md.empresas.findAndCountAll({
+        const empresas = await md.empresas.scope('withUser').findAndCountAll({
             where: where,
             attributes: ['id', 'nombre', 'activo', 'descripcion', 'email'],
-            order: [['fecha_creacion', 'DESC']],
             limit,
             offset,
+            order: [['fecha_creacion', 'DESC']],
         });
         res.status(200).json(empresas);
     } catch (error) {
@@ -55,7 +77,8 @@ const update = async (req, res) => {
 };
 
 module.exports = {
-    getAllByUser,
+    getById,
+    getAllByUsers,
     create,
     update,
 };

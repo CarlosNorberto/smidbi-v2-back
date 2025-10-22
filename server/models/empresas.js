@@ -89,5 +89,20 @@ module.exports = (sequelize, DataTypes) => {
         timestamps: false
     });
 
+    Empresas.associate = function(models) {
+        Empresas.belongsTo(models.usuarios, { foreignKey: 'id_usuario', as: 'user' });
+
+        // Scopes
+        Empresas.addScope('withUser', {
+            include: [
+                {
+                    model: models.usuarios, 
+                    as: 'user',
+                    attributes: ['id', 'nombre', 'email']
+                }
+            ]
+        });
+    }
+
     return Empresas;
 };
