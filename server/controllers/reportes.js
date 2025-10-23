@@ -112,7 +112,24 @@ const saveUpdate = async (req, res) => {
         if(body.id){
             report = await md.reportes.findByPk(body.id);
             if (report) {
+                // Actualizar reporte existente
                 await report.update(body);
+                // Manejar objetivos secundarios
+                if(body.objetivos_secundarios){
+                    // Eliminar objetivos secundarios existentes
+                    await md.reporte_objetivos_secundarios.destroy({
+                        where: { id_reporte: body.id }
+                    });                    
+                    // Agregar nuevos objetivos secundarios
+                    for(const objetivo of body.objetivos_secundarios){
+                        await md.reporte_objetivos_secundarios.create({
+                            id_reporte: body.id,
+                            id_objetivo: objetivo.id_objetivo,
+                            valor: objetivo.valor
+                        });
+                    }
+                }
+                // Devolver el reporte actualizado
                 return res.status(200).json(report);
             }else{
                 return res.status(404).json({ message: 'No se encontró el reporte para actualizar' });
