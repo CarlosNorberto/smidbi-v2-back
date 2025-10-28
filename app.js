@@ -4,6 +4,7 @@ const cors = require('cors');
 const passport = require('passport');
 const { sessionStore } = require('./server/auth/sessions');
 const { LoginLocalStrategy } = require('./server/auth/login_strategy');
+const path = require('path');
 
 // EXPRESS APP
 const app = express();
@@ -61,6 +62,10 @@ app.use((req, res, next) => {
 // ROUTES
 require('./server/routes')(app);
 
+// MIDDLEWARE uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// WELCOME ROUTE
 app.get('/', (req, res) => {
     res.send('Welcome to the SMIDBI v2 backend!!');
 });

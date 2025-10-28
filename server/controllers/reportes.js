@@ -2,13 +2,15 @@ const md = require('../models');
 const { DateTime } = require('luxon');
 const { format, parse } = require('date-fns');
 const { fromZonedTime } = require('date-fns-tz');
+const { getUploadUrl, getUploadPath } = require('../helps');
+const fs = require('fs');
 
 const getById = async (req, res) => {
     try {
         const { id } = req.params;
         let { attributes } = req.query;
         attributes = attributes ? attributes.split(',') : null;
-        const reporte = await md.reportes.scope('withSecondaryObjectives').findOne({
+        const reporte = await md.reportes.findOne({
             where: {
                 id: id,
                 activo: true
@@ -109,37 +111,63 @@ const saveUpdate = async (req, res) => {
         let body = req.body;
         body.id_usuario = req.user.id;
         let report = null;
-        if(body.id){
+        if (body.id) {
             report = await md.reportes.findByPk(body.id);
             if (report) {
                 // Actualizar reporte existente
                 await report.update(body);
-                // Manejar objetivos secundarios
-                if(body.objetivos_secundarios){
-                    // Eliminar objetivos secundarios existentes
-                    await md.reporte_objetivos_secundarios.destroy({
-                        where: { id_reporte: body.id }
-                    });                    
-                    // Agregar nuevos objetivos secundarios
-                    for(const objetivo of body.objetivos_secundarios){
-                        await md.reporte_objetivos_secundarios.create({
-                            id_reporte: body.id,
-                            id_objetivo: objetivo.id_objetivo,
-                            valor: objetivo.valor
-                        });
-                    }
-                }
                 // Devolver el reporte actualizado
                 return res.status(200).json(report);
-            }else{
+            } else {
                 return res.status(404).json({ message: 'No se encontró el reporte para actualizar' });
             }
-        }else{
+        } else {
             report = await md.reportes.create(body);
         }
         res.status(201).json(report);
     } catch (error) {
         res.status(500).json({ message: `Error al guardar el reporte ${error.message}` });
+    }
+};
+
+// ************** SECONDARY OBJECTIVES
+
+const getSecondaryObjectivesByReportId = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const objetivos_secundarios = await md.reporte_objetivos_secundarios.findAll({
+            where: {
+                id_reporte: report_id
+            }
+        });
+        res.status(200).json(objetivos_secundarios);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener los objetivos secundarios ${error.message}` });
+    }
+};
+
+const saveUpdateSecondaryObjectives = async (req, res) => {
+    try {
+        const objetivos = req.body;
+        const { report_id } = req.params;
+
+        // Eliminar objetivos secundarios existentes
+        await md.reporte_objetivos_secundarios.destroy({
+            where: { id_reporte: report_id }
+        });
+
+        // Agregar nuevos objetivos secundarios
+        for (const objetivo of objetivos) {
+            await md.reporte_objetivos_secundarios.create({
+                id_reporte: report_id,
+                id_objetivo: objetivo.id_objetivo,
+                valor: objetivo.valor
+            });
+        }
+
+        res.status(200).json({ message: "Objetivos secundarios actualizados correctamente." });
+    } catch (error) {
+        res.status(500).json({ message: `Error al actualizar los objetivos secundarios ${error.message}` });
     }
 };
 
@@ -186,7 +214,7 @@ const updateAllDaysByReportAndObjetivo = async (req, res) => {
         });
         if (!report) {
             return res.status(404).json({ message: 'No se encontró el reporte' });
-        }        
+        }
         for (const day of days) {
             await md.reporte_dia.update({ valor: day.valor }, {
                 where: {
@@ -221,6 +249,241 @@ const updateReporteDia = async (req, res) => {
         res.status(500).send({ message: "Ocurrió un error al guardar el valor en reporte_dia. " + error });
     }
 }
+
+// ************** REPORT GENRES
+
+/**
+ * Obtiene los géneros por ID de reporte.
+ * @param {*} req - Request con parámetro report_id 
+ * @param {*} res - Response con los datos del género del reporte
+ * @return {Promise<void>}
+ */
+const getGenderByReportId = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const reporte_genero = await md.interaccion_genero.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            }
+        });
+        res.status(200).json(reporte_genero);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener el género del reporte ${error.message}` });
+    }
+};
+
+const saveUpdateGender = async (req, res) => {
+    try {
+        const body = req.body;
+        const { report_id } = req.params;
+        let reporte_genero = await md.interaccion_genero.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            }
+        });
+        if (reporte_genero) {
+            await reporte_genero.update(body);
+        } else {
+            reporte_genero = await md.interaccion_genero.create(body);
+        }
+        res.status(200).json(reporte_genero);
+    } catch (error) {
+        res.status(500).json({ message: `Error al guardar/actualizar el género del reporte ${error.message}` });
+    }
+};
+
+// ************** REPORT DEVICES
+
+/**
+ * Obtiene los dispositivos por ID de reporte.
+ * @param {*} req - Request con parámetro report_id
+ * @param {*} res - Response con los datos de dispositivos del reporte
+ * @return {Promise<void>}
+ */
+const getDevicesByReportId = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const reporte_dispositivos = await md.interaccion_dispositivo.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            },
+            attributes: {
+                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+            }
+        });
+        res.status(200).json(reporte_dispositivos);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener los dispositivos del reporte ${error.message}` });
+    }
+};
+
+const saveUpdateDevices = async (req, res) => {
+    try {
+        const body = req.body;
+        const { report_id } = req.params;
+        let reporte_dispositivos = await md.interaccion_dispositivo.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            }
+        });
+        if (reporte_dispositivos) {
+            await reporte_dispositivos.update(body);
+        } else {
+            reporte_dispositivos = await md.interaccion_dispositivo.create(body);
+        }
+        res.status(200).json(reporte_dispositivos);
+    } catch (error) {
+        res.status(500).json({ message: `Error al guardar/actualizar los dispositivos del reporte ${error.message}` });
+    }
+};
+
+// ************** REPORT HOURS
+
+/**
+ * Obtiene las horas por ID de reporte.
+ * @param {*} req - Request con parámetro report_id
+ * @param {*} res - Response con los datos de horas del reporte
+ * @return {Promise<void>}
+ */
+const getHoursByReportId = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const reporte_horas = await md.interaccion_hora.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            },
+            attributes: {
+                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+            }
+        });
+        res.status(200).json(reporte_horas);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener las horas del reporte ${error.message}` });
+    }
+};
+
+/** Guarda o actualiza las horas por ID de reporte.
+ * @param {*} req - Request con parámetro report_id y body con datos de horas
+ * @param {*} res - Response con los datos guardados o actualizados de horas del reporte
+ * @return {Promise<void>}
+ */
+const saveUpdateHours = async (req, res) => {
+    try {
+        const body = req.body;
+        const { report_id } = req.params;
+        let reporte_horas = await md.interaccion_hora.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            },
+            attributes: {
+                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+            }
+        });
+        if (reporte_horas) {
+            await reporte_horas.update(body);
+        } else {
+            reporte_horas = await md.interaccion_hora.create(body);
+        }
+        res.status(200).json(reporte_horas);
+    } catch (error) {
+        res.status(500).json({ message: `Error al guardar/actualizar las horas del reporte ${error.message}` });
+    }
+};
+
+// ************** REPORT VIEW ADS
+
+/** Obtiene los ADS cargados por ID de reporte.
+ * @param {*} req - Request con parámetro report_id
+ * @param {*} res - Response con los datos de anuncios vistos del reporte
+ * @return {Promise<void>}
+ */
+const getViewAdsByReportId = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        let reporte_view_ads = await md.view_ads.findAll({
+            where: {
+                id_reporte: parseInt(report_id)
+            },
+            attributes: {
+                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+            }
+        });
+        // Agregar URL completa de la imagen a respuesta
+        for (const ad of reporte_view_ads) {
+            ad.dataValues.url = getUploadUrl(req, 'ads', ad.imagen);
+        }
+
+        res.status(200).json(reporte_view_ads);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener los ADS asociados del reporte ${error.message}` });
+    }
+};
+
+const saveUpdateViewAds = async (req, res) => {
+    try {
+        const body = req.body;
+        const { report_id } = req.params;
+        let reporte_view_ads = await md.interaccion_view_ads.findOne({
+            where: {
+                id_reporte: parseInt(report_id)
+            }
+        });
+        if (reporte_view_ads) {
+            await reporte_view_ads.update(body);
+        } else {
+            reporte_view_ads = await md.interaccion_view_ads.create(body);
+        }
+        res.status(200).json(reporte_view_ads);
+    } catch (error) {
+        res.status(500).json({ message: `Error al guardar/actualizar los anuncios vistos del reporte ${error.message}` });
+    }
+};
+
+const uploadAdImage = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const file = req.file;
+
+        if (!file) {
+            return res.status(400).json({ message: "No se ha subido ninguna imagen." });
+        }
+
+        const imageName = file.filename;
+
+        await md.view_ads.create({
+            imagen: imageName,
+            id_reporte: parseInt(report_id),
+            usuario_creacion: req.user.id
+        });
+
+        res.status(200).json({ message: "Imagen de anuncio subida exitosamente." });
+    } catch (error) {
+        res.status(500).json({ message: `Error al subir la imagen del anuncio ${error.message}` });
+    }
+};
+
+const deleteAdImage = async (req, res) => {
+    try {
+        const { imagen } = req.params;
+        await md.view_ads.destroy({
+            where: {
+                imagen: imagen,
+            }
+        });
+        const imagePath = getUploadPath('ads', imagen);
+        try {
+            fs.unlinkSync(imagePath);
+        } catch (error) {
+            console.error(`Error al eliminar la imagen del anuncio: ${error.message}`);
+        }
+
+        res.status(200).json({ message: "Imagen de anuncio eliminada exitosamente." });
+    } catch (error) {
+        res.status(500).json({ message: `Error al eliminar la imagen del anuncio ${error.message}` });
+    }
+};
+
+// ************** REPORT REVIEW
 
 const reporteDiasReview = async (req, res) => {
     try {
@@ -313,6 +576,12 @@ const reporteDiasReview = async (req, res) => {
 
             includes.push(includeCampana);
         }
+        includes.push({
+            model: md.campanas,
+            as: 'campana',
+            attributes: ['id', 'nombre'], // No devuelve datos de Campana (solo para JOIN)
+            required: true, // INNER JOIN
+        });
         const count = await md.reportes.findAndCountAll({
             where: query,
             attributes: ['id'],
@@ -354,8 +623,20 @@ module.exports = {
     getAllByCampaign,
     getAllByUser,
     saveUpdate,
+    getSecondaryObjectivesByReportId,
+    saveUpdateSecondaryObjectives,
     updateAllDaysByReportAndObjetivo,
     getDaysByReportId,
     updateReporteDia,
+    getGenderByReportId,
+    saveUpdateGender,
+    getDevicesByReportId,
+    saveUpdateDevices,
+    getHoursByReportId,
+    saveUpdateHours,
+    getViewAdsByReportId,
+    saveUpdateViewAds,
+    uploadAdImage,
+    deleteAdImage,
     reporteDiasReview,
 };
