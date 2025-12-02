@@ -91,6 +91,7 @@ module.exports = (sequelize, DataTypes) => {
 
     Empresas.associate = function(models) {
         Empresas.belongsTo(models.usuarios, { foreignKey: 'id_usuario', as: 'user' });
+        Empresas.hasMany(models.categorias, { foreignKey: 'id_empresa', as: 'categorias' });
 
         // Scopes
         Empresas.addScope('withUser', {

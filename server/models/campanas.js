@@ -177,5 +177,16 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'campanas',
         timestamps: false,
     });
+
+    Campanas.associate = (models) => {
+        Campanas.hasMany(models.reportes, {
+            foreignKey: 'id_campana',
+            as: 'reportes',
+        });
+        Campanas.belongsTo(models.categorias, {
+            foreignKey: 'id_categoria',
+            as: 'categoria',
+        });
+    };
     return Campanas;
 }

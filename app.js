@@ -31,7 +31,8 @@ app.use(session({
     saveUninitialized: false,
     store: sessionStore,
     cookie: {
-        secure: process.env.NODE_ENV === 'production',
+        // secure: process.env.NODE_ENV === 'production',
+        secure: false,
         maxAge: 7 * 24 * 60 * 60 * 1000,
         sameSite: 'strict'
     }
@@ -61,6 +62,7 @@ app.use((req, res, next) => {
 
 // ROUTES
 require('./server/routes')(app);
+require('./server/routes/lead_manager')(app);
 
 // MIDDLEWARE uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

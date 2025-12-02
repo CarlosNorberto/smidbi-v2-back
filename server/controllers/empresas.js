@@ -19,6 +19,26 @@ const getById = async (req, res) => {
     }
 };
 
+const getAll = async (req, res) => {
+    try {        
+        const { name = null } = req.query;        
+        let where = { activo: true };
+        if (name) {
+            where.nombre = {
+                [md.Sequelize.Op.iLike]: `%${name}%`
+            };
+        }
+        const empresas = await md.empresas.findAll({
+            where: where,
+            attributes: ['id', 'nombre', 'descripcion', 'email'],
+            order: [['fecha_creacion', 'DESC']],
+        });
+        res.status(200).json(empresas);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener las empresas: ${error.message}` });
+    }
+};
+
 const getAllByUsers = async (req, res) => {
     try {        
         const { user_ids } = req.params;
@@ -78,6 +98,7 @@ const update = async (req, res) => {
 
 module.exports = {
     getById,
+    getAll,
     getAllByUsers,
     create,
     update,

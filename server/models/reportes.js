@@ -91,13 +91,13 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.NUMERIC(8, 4),
             defaultValue: 0
         },
-        funnel:{
-          type :DataTypes.BOOLEAN,
-          defaultValue : false  
+        funnel: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
         },
-        id_usuario:{
-          type :DataTypes.INTEGER,
-          defaultValue : 1,
+        id_usuario: {
+            type: DataTypes.INTEGER,
+            defaultValue: 1,
             allowNull: false
         },
         id_mapa: {
@@ -191,7 +191,7 @@ module.exports = (sequelize, DataTypes) => {
         }
     }, {
         tableName: 'reportes',
-        timestamps: false,        
+        timestamps: false,
     });
 
     Reportes.associate = (models) => {
@@ -201,12 +201,12 @@ module.exports = (sequelize, DataTypes) => {
         });
         Reportes.belongsTo(models.plataformas, {
             foreignKey: 'id_plataforma',
-            as: 'platform'
+            as: 'plataforma'
         });
-        // Reportes.belongsTo(models.objetivos, {
-        //     foreignKey: 'id_objetivo',
-        //     as: 'objetivo'
-        // });
+        Reportes.belongsTo(models.objetivos, {
+            foreignKey: 'id_objetivo',
+            as: 'objetivo'
+        });
         Reportes.hasMany(models.reporte_dia, {
             foreignKey: 'id_reporte',
             as: 'reporte_dia'
@@ -214,6 +214,10 @@ module.exports = (sequelize, DataTypes) => {
         Reportes.hasMany(models.reporte_objetivos_secundarios, {
             foreignKey: 'id_reporte',
             as: 'objetivos_secundarios'
+        });
+        Reportes.hasOne(models.mapa_bolivia, {
+            foreignKey: 'id_reporte',
+            as: 'mapa_bolivia'
         });
 
         // Scopes
@@ -230,7 +234,7 @@ module.exports = (sequelize, DataTypes) => {
             include: [
                 {
                     model: models.plataformas,
-                    as: 'platform',
+                    as: 'plataforma',
                     attributes: ['id', 'plataforma', 'icono', 'code'],
                 }
             ]

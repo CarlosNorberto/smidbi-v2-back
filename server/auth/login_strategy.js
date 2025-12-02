@@ -26,6 +26,7 @@ const LoginLocalStrategy = (app) => {
                 return next(err);
             }
             if (!user) {
+                console.log("INFO",info);
                 return res.status(401).send(info);
             }
             req.login(user, (err) => {

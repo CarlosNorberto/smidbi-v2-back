@@ -26,7 +26,17 @@ const saveUpdate = async (req, res) => {
                 await segmentacionRecord.update({ 
                     segmentacion: segmentacion, demografia, geo_segmentacion, retargeting, learning, palabras_clave });
             } else {
-                segmentacionRecord = await md.segmentacion.create({ id_reporte, segmentacion, demografia, geo_segmentacion, retargeting, learning, palabras_clave, activo: true });
+                segmentacionRecord = await md.segmentacion.create({ 
+                    id_reporte, 
+                    segmentacion, 
+                    demografia, 
+                    geo_segmentacion, 
+                    retargeting, 
+                    learning, 
+                    palabras_clave, 
+                    activo: true,
+                    usuario_creacion: req.user.id
+                 });
             }
         } else {
             return res.status(400).json({ message: 'El id_reporte es obligatorio' });

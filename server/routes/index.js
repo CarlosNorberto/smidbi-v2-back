@@ -7,6 +7,7 @@ const reportes = require('../controllers/reportes');
 const plataformas = require('../controllers/plataformas');
 const objetivos = require('../controllers/objetivos');
 const segmentaciones = require('../controllers/segmentacion');
+const seguimiento = require('../controllers/seguimiento');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
@@ -26,13 +27,13 @@ const fileFilter = (req, file, cb) => {
     cb(null, true);
 };
 
-const upload = multer({ 
-    storage: storage, 
-    fileFilter: fileFilter, 
+const upload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
     limits: { fileSize: 5 * 1024 * 1024, files: 1 } // 5 MB
 });
 
-module.exports=(app)=>{
+module.exports = (app) => {
 
     // USUARIOS
     app.get(process.env.PREFIX_API + '/users/all', sessionAuth, usuarios.getAll);
@@ -40,7 +41,8 @@ module.exports=(app)=>{
 
     // EMPRESAS
     app.get(process.env.PREFIX_API + '/companies/one/:id', sessionAuth, empresas.getById);
-    app.get(process.env.PREFIX_API + '/companies/all/:user_ids', sessionAuth, empresas.getAllByUsers);
+    app.get(process.env.PREFIX_API + '/companies/all', sessionAuth, empresas.getAll);
+    app.get(process.env.PREFIX_API + '/companies/users/:user_ids', sessionAuth, empresas.getAllByUsers);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
 
@@ -57,6 +59,8 @@ module.exports=(app)=>{
     app.get(process.env.PREFIX_API + '/reports/all/:campaign_id', sessionAuth, reportes.getAllByCampaign);
     app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAllByUser);
     app.post(process.env.PREFIX_API + '/reports/save', sessionAuth, reportes.saveUpdate);
+    app.put(process.env.PREFIX_API + '/reports/enable_disable/:id', sessionAuth, reportes.enableDisableReport);
+    app.delete(process.env.PREFIX_API + '/reports/delete/:id', sessionAuth, reportes.deleteReport);
 
     // OBJETIVOS SECUNDARIOS
     app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, reportes.getSecondaryObjectivesByReportId);
@@ -86,6 +90,9 @@ module.exports=(app)=>{
     app.post(process.env.PREFIX_API + '/reports/day/review/:page/:limit', reportes.reporteDiasReview);
     app.put(process.env.PREFIX_API + '/reports/days/update_all/:report_id', sessionAuth, reportes.updateAllDaysByReportAndObjetivo);
 
+    // MAPA
+    app.get(process.env.PREFIX_API + '/reports/map/:report_id', sessionAuth, reportes.getMapByReportID);
+
     // PLATAFORMAS
     app.get(process.env.PREFIX_API + '/platforms/all', sessionAuth, plataformas.getAll);
 
@@ -95,5 +102,11 @@ module.exports=(app)=>{
     // SEGMENTACION
     app.get(process.env.PREFIX_API + '/segmentations/all/:report_id', sessionAuth, segmentaciones.getAllByReportId);
     app.post(process.env.PREFIX_API + '/segmentations/save', sessionAuth, segmentaciones.saveUpdate);
-    
+
+    // SEGUIMIENTO
+    app.post(process.env.PREFIX_API + '/tracking/load', sessionAuth, seguimiento.loadTracking);
+
+    // GESTOR DE PROSPECTOS - LEAD MANAGER
+
+
 }

@@ -61,5 +61,16 @@ module.exports = (sequelize, DataTypes) => {
         timestamps: false
     });
 
+    Categorias.associate = (models) => {
+        Categorias.hasMany(models.campanas, {
+            foreignKey: 'id_categoria',
+            as: 'campanas',
+        });
+        Categorias.belongsTo(models.empresas, {
+            foreignKey: 'id_empresa',
+            as: 'empresa',
+        });
+    };
+
     return Categorias;
 };

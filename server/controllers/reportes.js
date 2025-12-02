@@ -1,9 +1,10 @@
 const md = require('../models');
 const { DateTime } = require('luxon');
-const { format, parse } = require('date-fns');
-const { fromZonedTime } = require('date-fns-tz');
+const { isBefore, addDays, parse } = require('date-fns');
 const { getUploadUrl, getUploadPath } = require('../helps');
 const fs = require('fs');
+
+// ************** REPORTS
 
 const getById = async (req, res) => {
     try {
@@ -13,18 +14,11 @@ const getById = async (req, res) => {
         const reporte = await md.reportes.findOne({
             where: {
                 id: id,
-                activo: true
             },
             attributes: attributes ? attributes : ['id', 'nombre', 'descripcion']
         });
         if (!reporte) {
             return res.status(404).json({ message: 'Reporte no encontrado' });
-        }
-        if (reporte.fecha_ini && reporte.fecha_fin) {
-            const parsedDateIni = parse(reporte.fecha_ini, 'yyyy-MM-dd', new Date());
-            const parsedDateFin = parse(reporte.fecha_fin, 'yyyy-MM-dd', new Date());
-            reporte.dataValues.fecha_ini = format(parsedDateIni, 'yyyy-MM-dd');
-            reporte.dataValues.fecha_fin = format(parsedDateFin, 'yyyy-MM-dd');
         }
         res.status(200).json(reporte);
     } catch (error) {
@@ -116,17 +110,103 @@ const saveUpdate = async (req, res) => {
             if (report) {
                 // Actualizar reporte existente
                 await report.update(body);
-                // Devolver el reporte actualizado
-                return res.status(200).json(report);
             } else {
                 return res.status(404).json({ message: 'No se encontró el reporte para actualizar' });
             }
         } else {
+            if (body.fecha_ini) {
+                const parsed = parse(body.fecha_ini, 'yyyy/MM/dd', new Date());
+                body.fecha_ini = parsed;
+                body.fecha_inicio = parsed;
+            }
+            if (body.fecha_fin) {
+                const parsed = parse(body.fecha_fin, 'yyyy/MM/dd', new Date());
+                body.fecha_fin = parsed;
+                body.fecha_final = parsed;
+            }
+            body.usuario_creacion = req.user.id;
             report = await md.reportes.create(body);
         }
-        res.status(201).json(report);
+        await createDaysForReport(report.id, body.id_objetivo, body.fecha_ini, body.fecha_fin, req.user.id);
+        res.status(200).json({ message: 'Reporte guardado correctamente', data: report });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar el reporte ${error.message}` });
+    }
+};
+
+const createDaysForReport = async (reportId, objetivoId, dateInit, dateEnd, user_id) => {
+    try {
+        dateInit = new Date(dateInit);
+        dateEnd = new Date(dateEnd);
+        let current = dateInit;
+        // delete days
+        await md.reporte_dia.destroy({
+            where: {
+                id_reporte: reportId,
+                id_objetivo: objetivoId,
+            }
+        });
+        while (isBefore(current, addDays(dateEnd, 1))) {
+            const dia = current.getDate();
+            const mes = current.getMonth() + 1;
+            const anio = current.getFullYear();
+            // Verificar si el día ya existe
+            const existingDay = await md.reporte_dia.findOne({
+                where: {
+                    id_reporte: reportId,
+                    id_objetivo: objetivoId,
+                    dia: dia,
+                    mes: mes,
+                    anio: anio,
+                    usuario_modificacion: user_id
+                }
+            });
+            if (!existingDay) {
+                // Crear nuevo día
+                await md.reporte_dia.create({
+                    id_reporte: reportId,
+                    id_objetivo: objetivoId,
+                    dia: dia,
+                    mes: mes,
+                    anio: anio,
+                    valor: 0,
+                    usuario_creacion: user_id
+                });
+            }
+            // Avanzar al siguiente día
+            current = addDays(current, 1);
+        }
+    } catch (error) {
+        console.error(`Error al crear/actualizar días para el reporte ${reportId}: ${error.message}`);
+    }
+};
+
+const enableDisableReport = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const report = await md.reportes.findByPk(id);
+        if (!report) {
+            return res.status(404).json({ message: 'No se encontró el reporte' });
+        }
+        report.activo = !report.activo;
+        await report.save();
+        res.status(200).json({ message: 'Reporte actualizado correctamente', data: report });
+    } catch (error) {
+        res.status(500).json({ message: `Error al actualizar el reporte ${error.message}` });
+    }
+};
+
+const deleteReport = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const report = await md.reportes.findByPk(id);
+        if (!report) {
+            return res.status(404).json({ message: 'No se encontró el reporte para eliminar' });
+        }
+        await report.destroy();
+        res.status(200).json({ message: 'Reporte eliminado correctamente' });
+    } catch (error) {
+        res.status(500).json({ message: `Error al eliminar el reporte ${error.message}` });
     }
 };
 
@@ -244,7 +324,7 @@ const updateReporteDia = async (req, res) => {
         });
         const reporte = await md.reportes.findByPk(id_reporte);
         // const total_valor = await updateKPI(reporte);
-        res.status(200).send(reporte);
+        res.status(200).send({ message: "Valor actualizado correctamente en reporte_dia." });
     } catch (error) {
         res.status(500).send({ message: "Ocurrió un error al guardar el valor en reporte_dia. " + error });
     }
@@ -284,9 +364,11 @@ const saveUpdateGender = async (req, res) => {
         if (reporte_genero) {
             await reporte_genero.update(body);
         } else {
+            body.id_reporte = parseInt(report_id);
+            body.usuario_creacion = req.user.id;
             reporte_genero = await md.interaccion_genero.create(body);
         }
-        res.status(200).json(reporte_genero);
+        res.status(200).json({ message: "Género guardado correctamente.", data: reporte_genero });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar/actualizar el género del reporte ${error.message}` });
     }
@@ -329,9 +411,11 @@ const saveUpdateDevices = async (req, res) => {
         if (reporte_dispositivos) {
             await reporte_dispositivos.update(body);
         } else {
+            body.id_reporte = parseInt(report_id);
+            body.usuario_creacion = req.user.id;
             reporte_dispositivos = await md.interaccion_dispositivo.create(body);
         }
-        res.status(200).json(reporte_dispositivos);
+        res.status(200).json({ message: "Dispositivos guardados correctamente.", data: reporte_dispositivos });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar/actualizar los dispositivos del reporte ${error.message}` });
     }
@@ -382,9 +466,11 @@ const saveUpdateHours = async (req, res) => {
         if (reporte_horas) {
             await reporte_horas.update(body);
         } else {
+            body.id_reporte = parseInt(report_id);
+            body.usuario_creacion = req.user.id;
             reporte_horas = await md.interaccion_hora.create(body);
         }
-        res.status(200).json(reporte_horas);
+        res.status(200).json({ message: "Horas guardadas correctamente.", data: reporte_horas });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar/actualizar las horas del reporte ${error.message}` });
     }
@@ -433,7 +519,7 @@ const saveUpdateViewAds = async (req, res) => {
         } else {
             reporte_view_ads = await md.interaccion_view_ads.create(body);
         }
-        res.status(200).json(reporte_view_ads);
+        res.status(200).json({ message: "Imagen de anuncio guardado correctamente.", data: reporte_view_ads });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar/actualizar los anuncios vistos del reporte ${error.message}` });
     }
@@ -480,6 +566,56 @@ const deleteAdImage = async (req, res) => {
         res.status(200).json({ message: "Imagen de anuncio eliminada exitosamente." });
     } catch (error) {
         res.status(500).json({ message: `Error al eliminar la imagen del anuncio ${error.message}` });
+    }
+};
+
+// ************** REPORT MAP
+
+const getMapByReportID = async (req, res) => {
+    try {
+        const { report_id } = req.params;
+        const report = await md.reportes.findOne({
+            where: {
+                id: report_id,
+            },
+            attributes: ['id_mapa'],
+        });
+        if (!report) {
+            return res.status(400).json({ message: `Reporte no encontrado con ID ${report_id}` });
+        }
+        let model = null;
+        if (report.id_mapa === 1) {
+            // Bolivia
+            model = md.mapa_bolivia;
+        } else if (report.id_mapa === 2) {
+            // Ontario GTA
+            model = md.mapa_ontario_gta;
+        } else if (report.id_mapa === 3) {
+            // Paraguay
+            model = md.mapa_paraguay;
+        } else if (report.id_mapa === 4) {
+            // USA
+            model = md.mapa_usa;
+        } else if (report.id_mapa === 5) {
+            // Ecuador
+            model = md.mapa_ecuador;
+        } else if (report.id_mapa === 6) {
+            // Argentina
+            model = md.mapa_argentina;
+        } else {
+            return res.status(400).json({ message: `Mapa no encontrado con ID ${report.id_mapa}` });
+        }
+        const map_data = await model.findOne({
+            where: {
+                id_reporte: report_id,
+            },
+            attributes: {
+                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+            },
+        });
+        res.status(200).json(map_data);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener el mapa ${error.message}` });
     }
 };
 
@@ -579,8 +715,20 @@ const reporteDiasReview = async (req, res) => {
         includes.push({
             model: md.campanas,
             as: 'campana',
-            attributes: ['id', 'nombre'], // No devuelve datos de Campana (solo para JOIN)
+            attributes: ['id', 'nombre', 'id_categoria'], // No devuelve datos de Campana (solo para JOIN)
             required: true, // INNER JOIN
+            include: [{
+                model: md.categorias,
+                as: 'categoria',
+                attributes: ['id', 'nombre'],
+                required: false,
+                include: [{
+                    model: md.empresas,
+                    as: 'empresa',
+                    attributes: ['id', 'nombre'],
+                    required: false,
+                }]
+            }]
         });
         const count = await md.reportes.findAndCountAll({
             where: query,
@@ -593,7 +741,7 @@ const reporteDiasReview = async (req, res) => {
             offset: offset,
             limit: limit,
             include: includes,
-            attributes: ['id', 'fecha_inicio', 'fecha_final', 'nombre', 'id_campana', 'id_objetivo', 'objetivo_proyectado', 'id_usuario',
+            attributes: ['id', 'fecha_inicio', 'fecha_final', 'nombre', 'id_campana', 'id_objetivo', 'objetivo_proyectado', 'id_usuario', 'activo',
                 [md.sequelize.literal(`
                     (SELECT SUM(valor) 
                      FROM reporte_dia 
@@ -623,6 +771,8 @@ module.exports = {
     getAllByCampaign,
     getAllByUser,
     saveUpdate,
+    enableDisableReport,
+    deleteReport,
     getSecondaryObjectivesByReportId,
     saveUpdateSecondaryObjectives,
     updateAllDaysByReportAndObjetivo,
@@ -638,5 +788,6 @@ module.exports = {
     saveUpdateViewAds,
     uploadAdImage,
     deleteAdImage,
+    getMapByReportID,
     reporteDiasReview,
 };
