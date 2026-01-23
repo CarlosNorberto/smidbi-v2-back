@@ -71,5 +71,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/', (req, res) => {
     res.send('Welcome to the SMIDBI v2 backend!!');
 });
+app.get('/api/v2', (req, res) => {
+    res.send('Welcome to the SMIDBI v2 API!!');
+});
 
 module.exports = app;
