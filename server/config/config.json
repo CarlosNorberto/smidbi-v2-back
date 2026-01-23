@@ -4,13 +4,25 @@
     "password": "stephano",
     "database": "smidbi_backup_1",
     "host": "localhost",
-    "dialect": "postgres"    
+    "dialect": "postgres",
+    "pool": {
+      "max": 3,
+      "min": 0,
+      "idle": 10000,
+      "acquire": 30000
+    }
   },
   "production": {
     "username": "postgres",
     "password": "stephano",
     "database": "smidbi",
     "host": "165.227.27.86",
-    "dialect": "postgres"
+    "dialect": "postgres",
+    "pool": {
+      "max": 3,
+      "min": 0,
+      "idle": 10000,
+      "acquire": 30000
+    }
   }
 }

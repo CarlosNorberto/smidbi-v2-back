@@ -1,2 +1,11 @@
-node_modules
+# MODULES
+node_modules/
+
+# CONFIG
+server/config/config.json
+
+# Carpeta UPLOADS
 uploads/ads/*
+
+# Archivos de entorno
+.env
