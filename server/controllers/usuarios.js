@@ -53,7 +53,29 @@ const saveUpdate = async (req, res) => {
     }
 }
 
+const changePassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { currentPassword, newPassword } = req.body;
+        const usuarioRecord = await md.usuarios.findByPk(id);
+        if (!usuarioRecord) {
+            return res.status(404).json({ message: 'Usuario no encontrado.' });
+        }
+        const isMatch = await bcrypt.compare(currentPassword, usuarioRecord.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'La contraseña actual es incorrecta.' });
+        }
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        await usuarioRecord.update({ password: hashedPassword });
+        res.status(200).json({ message: 'Contraseña actualizada correctamente.' });
+    } catch (error) {
+        res.status(500).json({ message: `Error al cambiar la contraseña: ${error.message}` });
+    }
+}
+
 module.exports = {
     getAll,
     saveUpdate,
+    changePassword,
 };

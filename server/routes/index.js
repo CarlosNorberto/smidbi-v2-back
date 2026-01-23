@@ -38,6 +38,7 @@ module.exports = (app) => {
     // USUARIOS
     app.get(process.env.PREFIX_API + '/users/all', sessionAuth, usuarios.getAll);
     app.post(process.env.PREFIX_API + '/users/save', sessionAuth, usuarios.saveUpdate);
+    app.put(process.env.PREFIX_API + '/users/change_password/:id', sessionAuth, usuarios.changePassword);
 
     // EMPRESAS
     app.get(process.env.PREFIX_API + '/companies/one/:id', sessionAuth, empresas.getById);
