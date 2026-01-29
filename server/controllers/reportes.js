@@ -54,43 +54,59 @@ const getAllByCampaign = async (req, res) => {
     }
 };
 
-const getAllByUser = async (req, res) => {
+const getAll = async (req, res) => {
     try {
         const { page = 1, limit = 10 } = req.params;
         const offset = (page - 1) * limit;
-        let where = {
-            id_usuario: req.user.id,
-            activo: true
-        };
+        let where = {};
         if (req.body) {
-            const { name } = req.body;
+            const { name, own, campaign_id, category_id, company_id, year, month } = req.body;
+            if (own === true || own === 'true') {
+                where.id_usuario = req.user.id;
+            }
             if (name) {
                 where.nombre = {
                     [md.Sequelize.Op.iLike]: `%${name}%`
                 };
             }
+            if (campaign_id) {
+                where.id_campana = campaign_id;
+            }
+            if (category_id) {
+                where['$campana.id_categoria$'] = category_id;
+            }
+            if (company_id) {
+                where['$campana.categoria.id_empresa$'] = company_id;
+            }
+            if (year && month) {
+                where.fecha_ini = {
+                    [md.Sequelize.Op.and]: [
+                        md.Sequelize.where(md.Sequelize.fn('EXTRACT', md.Sequelize.literal('YEAR FROM "fecha_ini"')), year),
+                        md.Sequelize.where(md.Sequelize.fn('EXTRACT', md.Sequelize.literal('MONTH FROM "fecha_ini"')), month)
+                    ]
+                };
+            }
         }
         const reportes = await md.reportes.findAndCountAll({
-            where: where,
-            attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-                include: [
-                    // Mantener el campo original
-                    'fecha_inicio',
-                    // Agregar campo convertido con alias distinto
-                    [
-                        md.Sequelize.literal(`
-                    to_char(
-                        fecha_inicio AT TIME ZONE 'America/La_Paz' 
-                        AT TIME ZONE '${req.user.time_zone || 'UTC'}',
-                        'YYYY-MM-DD HH24:MI:SS'
-                    )
-                `),
-                        'fecha_inicio_local'  // Usar un alias diferente
-                    ]
-                ]
-            },
-            order: [['id', 'DESC']],
+            where: where,            
+            include: [{
+                model: md.campanas,
+                as: 'campana',
+                attributes: ['id', 'nombre', 'id_categoria'],
+                required: true,
+                include: [{
+                    model: md.categorias,
+                    as: 'categoria',
+                    attributes: ['id', 'nombre', 'id_empresa'],
+                    required: true,
+                    include: [{
+                        model: md.empresas,
+                        as: 'empresa',
+                        attributes: ['id', 'nombre'],
+                        required: true,
+                    }]
+                }]
+            }],
             limit,
             offset,
         });
@@ -768,8 +784,8 @@ const reporteDiasReview = async (req, res) => {
 
 module.exports = {
     getById,
-    getAllByCampaign,
-    getAllByUser,
+    getAll,
+    getAllByCampaign,    
     saveUpdate,
     enableDisableReport,
     deleteReport,

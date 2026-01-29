@@ -56,9 +56,9 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/campaigns/all/:category_id', sessionAuth, campanas.getByCategory);
 
     // REPORTES
-    app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);
+    app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);    
     app.get(process.env.PREFIX_API + '/reports/all/:campaign_id', sessionAuth, reportes.getAllByCampaign);
-    app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAllByUser);
+    app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAll);
     app.post(process.env.PREFIX_API + '/reports/save', sessionAuth, reportes.saveUpdate);
     app.put(process.env.PREFIX_API + '/reports/enable_disable/:id', sessionAuth, reportes.enableDisableReport);
     app.delete(process.env.PREFIX_API + '/reports/delete/:id', sessionAuth, reportes.deleteReport);
