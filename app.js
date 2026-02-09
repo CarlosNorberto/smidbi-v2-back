@@ -63,6 +63,7 @@ app.use((req, res, next) => {
 // ROUTES
 require('./server/routes')(app);
 require('./server/routes/lead_manager')(app);
+require('./server/routes/tasks')(app);
 
 // MIDDLEWARE uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

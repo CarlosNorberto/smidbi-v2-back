@@ -92,6 +92,18 @@ module.exports = (sequelize, DataTypes) => {
         TasksCards.belongsTo(models.reportes, {
             foreignKey: 'report_id',
             as: 'report',
+        });        
+        TasksCards.belongsToMany(models.tasks_tags, {
+            through: 'tasks_cards_tags',
+            foreignKey: 'card_id',
+            otherKey: 'tag_id',
+            as: 'tags',
+        });
+        TasksCards.belongsToMany(models.tasks_card_responsibles, {
+            through: 'tasks_card_responsibles',
+            foreignKey: 'card_id',
+            otherKey: 'responsible_id',
+            as: 'responsibles',
         });
     };
 

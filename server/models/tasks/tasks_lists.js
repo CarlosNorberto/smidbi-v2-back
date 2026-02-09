@@ -18,5 +18,14 @@ module.exports = (sequelize, DataTypes) => {
         tableName: 'tasks_lists',
         timestamps: false,
     });
+
+    TasksLists.associate = (models) => {
+        TasksLists.hasMany(models.tasks_cards, {
+            foreignKey: 'list_id',
+            as: 'cards',
+            onDelete: 'CASCADE',
+        });
+    };
+
     return TasksLists;
 }
