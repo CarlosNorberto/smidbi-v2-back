@@ -18,7 +18,7 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: false,
         },
         order: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.FLOAT,
             defaultValue: 0,
             allowNull: true,
         },
@@ -99,7 +99,7 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'tag_id',
             as: 'tags',
         });
-        TasksCards.belongsToMany(models.tasks_card_responsibles, {
+        TasksCards.belongsToMany(models.usuarios, {
             through: 'tasks_card_responsibles',
             foreignKey: 'card_id',
             otherKey: 'responsible_id',
