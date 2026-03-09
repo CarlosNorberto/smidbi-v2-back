@@ -1,4 +1,5 @@
 const md = require('../../models');
+const { getObjetivoLogrado } = require('../../helps');
 
 const getById = async (req, res) => {
     try {
@@ -19,7 +20,7 @@ const getById = async (req, res) => {
                 {
                     model: md.reportes,
                     as: 'report',
-                    attributes: ['nombre', 'fecha_ini', 'fecha_fin', 'presupuesto'],
+                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp'],
                     include: [
                         {
                             model: md.campanas,
@@ -59,10 +60,16 @@ const getById = async (req, res) => {
         if (!card) {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
+
+        const idReporte = card.report?.id;
+        const idObjetivo = card.report?.objetivo?.id;
+        const objetivoLogrado = await getObjetivoLogrado(idReporte, idObjetivo);
+        card.report.dataValues.objetivo_logrado = objetivoLogrado;
+
         res.status(200).json(card);
     }
     catch (error) {
-        res.status(500).json({ message: 'Error al obtener la tarjeta' });
+        res.status(500).json({ message: 'Error al obtener la tarjeta', error });
     }
 };
 

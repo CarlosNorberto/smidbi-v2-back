@@ -2,6 +2,7 @@ const { sessionAuth } = require('../../auth/middleware');
 const tasksLists = require('../../controllers/tasks/tasks_lists');
 const tasksCards = require('../../controllers/tasks/tasks_cards');
 const tasksTags = require('../../controllers/tasks/tasks_tags');
+const tasksAds = require('../../controllers/tasks/tasks_ads');
 
 module.exports=(app)=>{
     
@@ -15,5 +16,8 @@ module.exports=(app)=>{
 
     // TASKS TAGS
     app.get(process.env.PREFIX_API + '/tasks_tags/all', sessionAuth, tasksTags.getAll);
+
+    // TASKS ADS
+    app.post(process.env.PREFIX_API + '/tasks_ads/save', sessionAuth, tasksAds.saveUpdate);
 
 }
