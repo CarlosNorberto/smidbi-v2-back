@@ -18,6 +18,11 @@ const getById = async (req, res) => {
                     attributes: ['id', 'nombre', 'email', 'time_zone'],
                 },
                 {
+                    model: md.tasks_ads,
+                    as: 'ads',
+                    attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'seg_segmentations', 'seg_ages', 'seg_cities']
+                },
+                {
                     model: md.reportes,
                     as: 'report',
                     attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp'],
@@ -52,7 +57,7 @@ const getById = async (req, res) => {
                             model: md.objetivos,
                             as: 'objetivo',
                             attributes: ['id', 'objetivo']
-                        }
+                        },                        
                     ]
                 }
             ]

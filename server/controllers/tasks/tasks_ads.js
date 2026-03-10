@@ -9,21 +9,16 @@ const getByCardId = async (req, res) => {
                 card_id: card_id
             },
             attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'seg_segmentations', 'seg_ages', 'seg_cities']
-        });
-        // concatenar segmanteaciones de la tabla segmentacion
-        const segmentacion = await md.segmentacion.findOne({
-            where: {
-                activo: true,
-                id_reporte: report_id
-            },
-        });
+        });        
         if (ad) {
-            if (segmentacion) {
-                ad.seg_segmentations = segmentacion.segmentacion ? ad.seg_segmentations ? [...new Set([...ad.seg_segmentations, ...segmentacion.segmentacion])] : segmentacion.segmentacion : ad.seg_segmentations;
-                ad.seg_ages = segmentacion.demografia ? ad.seg_ages ? [...new Set([...ad.seg_ages, ...segmentacion.demografia])] : segmentacion.demografia : ad.seg_ages;
-                ad.seg_cities = segmentacion.geo_segmentacion ? ad.seg_cities ? [...new Set([...ad.seg_cities, ...segmentacion.geo_segmentacion])] : segmentacion.geo_segmentacion : ad.seg_cities;
-            }
-        } else if (segmentacion) {
+            res.status(200).json(ad);
+        } else {
+            const segmentacion = await md.segmentacion.findOne({
+                where: {
+                    activo: true,
+                    id_reporte: report_id
+                },
+            });
             res.status(200).json({
                 card_id: card_id,
                 material_links: null,
@@ -32,10 +27,8 @@ const getByCardId = async (req, res) => {
                 seg_segmentations: segmentacion.segmentacion ? segmentacion.segmentacion : null,
                 seg_ages: segmentacion.demografia ? segmentacion.demografia : null,
                 seg_cities: segmentacion.geo_segmentacion ? segmentacion.geo_segmentacion : null
-            });
-            return;
-        }
-        res.status(200).json(ad);
+            });            
+        }        
     } catch (error) {
         res.status(500).json({ message: `Error al obtener el anuncio: ${error.message}` });
     }

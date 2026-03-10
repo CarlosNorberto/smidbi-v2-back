@@ -92,7 +92,12 @@ module.exports = (sequelize, DataTypes) => {
         TasksCards.belongsTo(models.reportes, {
             foreignKey: 'report_id',
             as: 'report',
-        });        
+        });
+        TasksCards.belongsTo(models.tasks_ads, {
+            foreignKey: 'id',
+            targetKey: 'card_id',
+            as: 'ads',
+        });
         TasksCards.belongsToMany(models.tasks_tags, {
             through: 'tasks_cards_tags',
             foreignKey: 'card_id',
