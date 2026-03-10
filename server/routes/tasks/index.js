@@ -18,6 +18,7 @@ module.exports=(app)=>{
     app.get(process.env.PREFIX_API + '/tasks_tags/all', sessionAuth, tasksTags.getAll);
 
     // TASKS ADS
+    app.get(process.env.PREFIX_API + '/tasks_ads/:card_id/:report_id', sessionAuth, tasksAds.getByCardId);
     app.post(process.env.PREFIX_API + '/tasks_ads/save', sessionAuth, tasksAds.saveUpdate);
 
 }

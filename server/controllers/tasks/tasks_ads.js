@@ -1,30 +1,71 @@
 const md = require('../../models');
 
+const getByCardId = async (req, res) => {
+    try {
+        const { card_id, report_id } = req.params;
+
+        const ad = await md.tasks_ads.findOne({
+            where: {
+                card_id: card_id
+            },
+            attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'seg_segmentations', 'seg_ages', 'seg_cities']
+        });
+        // concatenar segmanteaciones de la tabla segmentacion
+        const segmentacion = await md.segmentacion.findOne({
+            where: {
+                activo: true,
+                id_reporte: report_id
+            },
+        });
+        if (ad) {
+            if (segmentacion) {
+                ad.seg_segmentations = segmentacion.segmentacion ? ad.seg_segmentations ? [...new Set([...ad.seg_segmentations, ...segmentacion.segmentacion])] : segmentacion.segmentacion : ad.seg_segmentations;
+                ad.seg_ages = segmentacion.demografia ? ad.seg_ages ? [...new Set([...ad.seg_ages, ...segmentacion.demografia])] : segmentacion.demografia : ad.seg_ages;
+                ad.seg_cities = segmentacion.geo_segmentacion ? ad.seg_cities ? [...new Set([...ad.seg_cities, ...segmentacion.geo_segmentacion])] : segmentacion.geo_segmentacion : ad.seg_cities;
+            }
+        } else if (segmentacion) {
+            res.status(200).json({
+                card_id: card_id,
+                material_links: null,
+                platform_links: null,
+                cta_ad: null,
+                seg_segmentations: segmentacion.segmentacion ? segmentacion.segmentacion : null,
+                seg_ages: segmentacion.demografia ? segmentacion.demografia : null,
+                seg_cities: segmentacion.geo_segmentacion ? segmentacion.geo_segmentacion : null
+            });
+            return;
+        }
+        res.status(200).json(ad);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener el anuncio: ${error.message}` });
+    }
+};
+
 const saveUpdate = async (req, res) => {
     try {
-        const { card_id, material_links, platform_links, cta_ad, segmentacion, demografia, geo_segmentacion} = req.body;
+        const { card_id, material_links, platform_links, cta_ad, segmentacion, demografia, geo_segmentacion } = req.body;
         let segmentacionRecord;
         if (card_id) {
             segmentacionRecord = await md.tasks_ads.findOne({ where: { card_id } });
             if (segmentacionRecord) {
-                await segmentacionRecord.update({ 
+                await segmentacionRecord.update({
                     material_links: material_links,
                     platform_links: platform_links,
                     cta_ad: cta_ad,
-                    seg_segmentations: segmentacion, 
-                    seg_ages: demografia, 
+                    seg_segmentations: segmentacion,
+                    seg_ages: demografia,
                     seg_cities: geo_segmentacion,
                 });
             } else {
-                segmentacionRecord = await md.tasks_ads.create({ 
-                    card_id: card_id, 
+                segmentacionRecord = await md.tasks_ads.create({
+                    card_id: card_id,
                     material_links: material_links,
                     platform_links: platform_links,
                     cta_ad: cta_ad,
-                    seg_segmentations: segmentacion, 
-                    seg_ages: demografia, 
-                    seg_cities: geo_segmentacion,                    
-                 });
+                    seg_segmentations: segmentacion,
+                    seg_ages: demografia,
+                    seg_cities: geo_segmentacion,
+                });
             }
         } else {
             return res.status(400).json({ message: 'El card_id es obligatorio' });
@@ -36,5 +77,6 @@ const saveUpdate = async (req, res) => {
 };
 
 module.exports = {
+    getByCardId,
     saveUpdate
 };
