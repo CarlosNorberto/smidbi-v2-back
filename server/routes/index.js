@@ -11,14 +11,14 @@ const seguimiento = require('../controllers/seguimiento');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/ads/');
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
+// const storage = multer.diskStorage({
+//     destination: function (req, file, cb) {
+//         cb(null, 'uploads/ads/');
+//     },
+//     filename: function (req, file, cb) {
+//         cb(null, Date.now() + '-' + file.originalname);
+//     }
+// });
 const fileFilter = (req, file, cb) => {
     // Accept images only
     if (!file.mimetype.startsWith('image/')) {
@@ -28,7 +28,7 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-    storage: storage,
+    storage: multer.memoryStorage(),
     fileFilter: fileFilter,
     limits: { fileSize: 5 * 1024 * 1024, files: 1 } // 5 MB
 });
@@ -83,7 +83,7 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/reports/view_ads/:report_id', sessionAuth, reportes.getViewAdsByReportId);
     app.post(process.env.PREFIX_API + '/reports/view_ads/save/:report_id', sessionAuth, reportes.saveUpdateViewAds);
     app.post(process.env.PREFIX_API + '/reports/view_ads/upload_image/:report_id', sessionAuth, upload.single('ad_image'), reportes.uploadAdImage);
-    app.delete(process.env.PREFIX_API + '/reports/view_ads/delete_image/:imagen', sessionAuth, reportes.deleteAdImage);
+    app.delete(process.env.PREFIX_API + '/reports/view_ads/delete_image/:image_url', sessionAuth, reportes.deleteAdImage);
 
     // DÍAS DE REPORTES
     app.get(process.env.PREFIX_API + '/reports/days/:report_id', sessionAuth, reportes.getDaysByReportId);

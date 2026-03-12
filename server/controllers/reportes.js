@@ -3,6 +3,7 @@ const { DateTime } = require('luxon');
 const { isBefore, addDays, parse } = require('date-fns');
 const { getUploadUrl, getUploadPath } = require('../helps');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 
 // ************** REPORTS
 
@@ -502,7 +503,13 @@ const saveUpdateHours = async (req, res) => {
 const getViewAdsByReportId = async (req, res) => {
     try {
         const { report_id } = req.params;
-        let reporte_view_ads = await md.view_ads.findAll({
+        const { width, quality='auto', fetch_format='auto' } = req.query;
+        const options = {            
+            quality,
+            fetch_format,
+            secure: true,
+        };
+        const reporte_view_ads = await md.view_ads.findAll({
             where: {
                 id_reporte: parseInt(report_id)
             },
@@ -510,9 +517,12 @@ const getViewAdsByReportId = async (req, res) => {
                 exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
             }
         });
-        // Agregar URL completa de la imagen a respuesta
+        if (width) {
+            options.width = parseInt(width);
+            options.crop = 'limit';
+        }
         for (const ad of reporte_view_ads) {
-            ad.dataValues.url = getUploadUrl(req, 'ads', ad.imagen);
+            ad.dataValues.image_url = cloudinary.url(ad.image_url, options);
         }
 
         res.status(200).json(reporte_view_ads);
@@ -550,12 +560,14 @@ const uploadAdImage = async (req, res) => {
             return res.status(400).json({ message: "No se ha subido ninguna imagen." });
         }
 
-        const imageName = file.filename;
-
+        const b64 = Buffer.from(file.buffer).toString('base64');
+        const dataURI = `data:${file.mimetype};base64,${b64}`;
+        const resp_cloudinary = await cloudinary.uploader.upload(dataURI, { folder: 'SMID/VIEW ADS' });
+        
         await md.view_ads.create({
-            imagen: imageName,
             id_reporte: parseInt(report_id),
-            usuario_creacion: req.user.id
+            usuario_creacion: req.user.id,
+            image_url: resp_cloudinary.public_id
         });
 
         res.status(200).json({ message: "Imagen de anuncio subida exitosamente." });
@@ -566,18 +578,17 @@ const uploadAdImage = async (req, res) => {
 
 const deleteAdImage = async (req, res) => {
     try {
-        const { imagen } = req.params;
-        await md.view_ads.destroy({
+        const { image_url } = req.params;
+        const viewAd = await md.view_ads.findOne({
             where: {
-                imagen: imagen,
+                image_url: image_url,
             }
         });
-        const imagePath = getUploadPath('ads', imagen);
-        try {
-            fs.unlinkSync(imagePath);
-        } catch (error) {
-            console.error(`Error al eliminar la imagen del anuncio: ${error.message}`);
+        if (!viewAd) {
+            return res.status(404).json({ message: 'No se encontró la imagen del anuncio para eliminar' });
         }
+        await cloudinary.uploader.destroy(viewAd.image_url);
+        await viewAd.destroy();
 
         res.status(200).json({ message: "Imagen de anuncio eliminada exitosamente." });
     } catch (error) {

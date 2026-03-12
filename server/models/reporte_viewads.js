@@ -11,7 +11,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         imagen: {
             type: DataTypes.STRING,
-            allowNull: false
+            allowNull: true
         },
         usuario_creacion: {
             type: DataTypes.INTEGER,
@@ -53,6 +53,10 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true
         },
         title: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        image_url: {
             type: DataTypes.STRING,
             allowNull: true
         }
