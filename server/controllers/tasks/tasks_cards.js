@@ -57,7 +57,7 @@ const getById = async (req, res) => {
                             model: md.objetivos,
                             as: 'objetivo',
                             attributes: ['id', 'objetivo']
-                        },                        
+                        },
                     ]
                 }
             ]
@@ -70,6 +70,10 @@ const getById = async (req, res) => {
         const idObjetivo = card.report?.objetivo?.id;
         const objetivoLogrado = await getObjetivoLogrado(idReporte, idObjetivo);
         card.report.dataValues.objetivo_logrado = objetivoLogrado;
+
+        const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
+        const currentDate = new Date();
+        card.dataValues.expired_message = expDate < currentDate ? 'Plazo vencido' : 'Vigente';
 
         res.status(200).json(card);
     }
@@ -93,7 +97,7 @@ const update = async (req, res) => {
     try {
         const id = req.params.id;
 
-        const card = await md.tasks_cards.findByPk(id);
+        const card = await md.tasks_cards.scope(['withResponsibles', 'withTags']).findByPk(id);
         if (!card) {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
@@ -107,10 +111,26 @@ const update = async (req, res) => {
             completed: isCompleted,
         };
 
-        await card.update(updateData);
-
         if (responsibles) {
-            // remove all responsibles
+            console.log(responsibles);
+            const prevIds = new Set(card.responsibles.map(r => r.id));
+            const newIds = new Set(responsibles.map(r => r.id));
+            const added = responsibles.filter(r => !prevIds.has(r.id));
+            const removed = card.responsibles.filter(r => !newIds.has(r.id));
+            const is_change_responsibles = added.length > 0 || removed.length > 0;
+            if (is_change_responsibles) {
+                const parts = [];
+                if (added.length > 0) parts.push(`Responsable agregado: ${added.map(r => r.nombre).join(', ')}`);
+                if (removed.length > 0) parts.push(`Responsable removido: ${removed.map(r => r.nombre).join(', ')}`);
+
+                await md.tasks_activities.create({
+                    card_id: id,
+                    date_activity: new Date(),
+                    activity_detail: parts.join(' | '),
+                    responsible_id: req.user.id,
+                });
+            }
+
             await md.tasks_card_responsibles.destroy({ where: { card_id: id } });
             for (const resp of responsibles) {
                 await md.tasks_card_responsibles.create({
@@ -121,6 +141,28 @@ const update = async (req, res) => {
         }
 
         if (tags) {
+            const prevIds = new Set(card.tags.map(t => t.id));
+            const newIds = new Set(tags.map(t => t.id));
+            const added = tags.filter(t => !prevIds.has(t.id));
+            const removed = card.tags.filter(t => !newIds.has(t.id));
+            const is_change_tags = added.length > 0 || removed.length > 0;
+            if (is_change_tags) {
+                const addedTags = added.length > 0
+                    ? await md.tasks_tags.findAll({ where: { id: added.map(t => t.id) } })
+                    : [];
+
+                const parts = [];
+                if (added.length > 0) parts.push(`Etiqueta agregada: ${addedTags.map(t => t.name).join(', ')}`);
+                if (removed.length > 0) parts.push(`Etiqueta removida: ${removed.map(t => t.name).join(', ')}`);
+
+                await md.tasks_activities.create({
+                    card_id: id,
+                    date_activity: new Date(),
+                    activity_detail: parts.join(' | '),
+                    responsible_id: req.user.id,
+                });
+            }
+
             // remove all tags
             await md.tasks_cards_tags.destroy({ where: { card_id: id } });
             for (const tag of tags) {
@@ -131,6 +173,8 @@ const update = async (req, res) => {
                 });
             }
         }
+
+        await card.update(updateData);
 
         return res.status(200).json(card);
 

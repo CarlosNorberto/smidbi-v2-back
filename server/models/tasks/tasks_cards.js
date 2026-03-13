@@ -110,6 +110,27 @@ module.exports = (sequelize, DataTypes) => {
             otherKey: 'responsible_id',
             as: 'responsibles',
         });
+
+        // SCOPES
+        TasksCards.addScope('withResponsibles', {
+            include: [
+                {
+                    model: models.usuarios,
+                    as: 'responsibles',
+                    through: { attributes: [] },
+                    attributes: ['id', 'nombre', 'email', 'time_zone'],
+                }
+            ]
+        });
+        TasksCards.addScope('withTags', {
+            include: [
+                {
+                    model: models.tasks_tags,
+                    as: 'tags',
+                    through: { attributes: [] },
+                }
+            ]
+        });
     };
 
     return TasksCards;
