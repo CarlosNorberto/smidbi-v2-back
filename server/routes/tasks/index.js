@@ -3,6 +3,7 @@ const tasksLists = require('../../controllers/tasks/tasks_lists');
 const tasksCards = require('../../controllers/tasks/tasks_cards');
 const tasksTags = require('../../controllers/tasks/tasks_tags');
 const tasksAds = require('../../controllers/tasks/tasks_ads');
+const tasksActivities = require('../../controllers/tasks/tasks_activities');
 
 module.exports=(app)=>{
     
@@ -20,5 +21,8 @@ module.exports=(app)=>{
     // TASKS ADS
     app.get(process.env.PREFIX_API + '/tasks_ads/:card_id/:report_id', sessionAuth, tasksAds.getByCardId);
     app.post(process.env.PREFIX_API + '/tasks_ads/save', sessionAuth, tasksAds.saveUpdate);
+    app.delete(process.env.PREFIX_API + '/tasks_ads/:card_id', sessionAuth, tasksAds.deleteByCardId);
 
+    // TASKS ACTIVITIES
+    app.get(process.env.PREFIX_API + '/tasks_activities/card/:card_id', sessionAuth, tasksActivities.getAllByCardId);
 }

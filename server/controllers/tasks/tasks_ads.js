@@ -65,11 +65,27 @@ const saveUpdate = async (req, res) => {
         }
         res.status(200).json(segmentacionRecord);
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar la segmentación: ${error.message}` });
+        res.status(500).json({ message: `Error al guardar el anuncio asociado a la tarjeta: ${error.message}` });
     }
 };
 
+const deleteByCardId = async (req, res) => {
+    try {
+        const { card_id } = req.params;
+        const deleted = await md.tasks_ads.destroy({ where: { card_id } });
+        if (deleted) {
+            res.status(200).json({ message: 'Anuncio asociado a la tarjeta eliminado correctamente' });
+        } else {            
+            res.status(404).json({ message: 'No se encontró el anuncio para eliminar' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: `Error al eliminar el anuncio asociado a la tarjeta: ${error.message}` });
+    }
+};
+
+
 module.exports = {
     getByCardId,
-    saveUpdate
+    saveUpdate,
+    deleteByCardId
 };

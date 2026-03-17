@@ -71,9 +71,13 @@ const getById = async (req, res) => {
         const objetivoLogrado = await getObjetivoLogrado(idReporte, idObjetivo);
         card.report.dataValues.objetivo_logrado = objetivoLogrado;
 
-        const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
-        const currentDate = new Date();
-        card.dataValues.expired_message = expDate < currentDate ? 'Plazo vencido' : 'Vigente';
+        if(card.exp_date_year && card.exp_date_month && card.exp_date_day) {
+            const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
+            const currentDate = new Date();
+            card.dataValues.expired_message = expDate < currentDate ? 'Plazo vencido' : 'Vigente';
+        }else {
+            card.dataValues.expired_message = '';
+        }
 
         res.status(200).json(card);
     }
@@ -97,7 +101,7 @@ const update = async (req, res) => {
     try {
         const id = req.params.id;
 
-        const card = await md.tasks_cards.scope(['withResponsibles', 'withTags']).findByPk(id);
+        const card = await md.tasks_cards.scope(['withResponsibles', 'withTags', 'withReport']).findByPk(id);
         if (!card) {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
@@ -111,8 +115,7 @@ const update = async (req, res) => {
             completed: isCompleted,
         };
 
-        if (responsibles) {
-            console.log(responsibles);
+        if (responsibles) {            
             const prevIds = new Set(card.responsibles.map(r => r.id));
             const newIds = new Set(responsibles.map(r => r.id));
             const added = responsibles.filter(r => !prevIds.has(r.id));

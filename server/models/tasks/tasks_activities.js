@@ -28,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
 
     TasksActivities.associate = (models) => {
         TasksActivities.belongsTo(models.tasks_cards, { foreignKey: 'card_id', onDelete: 'CASCADE' });
-        TasksActivities.belongsTo(models.usuarios, { foreignKey: 'responsible_id', onDelete: 'CASCADE' });
+        TasksActivities.belongsTo(models.usuarios, { foreignKey: 'responsible_id', onDelete: 'CASCADE', as: 'usuario' });
     };
 
     return TasksActivities;

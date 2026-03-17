@@ -131,6 +131,48 @@ module.exports = (sequelize, DataTypes) => {
                 }
             ]
         });
+        TasksCards.addScope('withReport', {
+            include: [
+                {
+                    model: models.reportes,
+                    as: 'report',
+                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp'],
+                    include: [
+                        {
+                            model: models.campanas,
+                            as: 'campana',
+                            required: true,
+                            attributes: ['id', 'nombre'],
+                            include: [
+                                {
+                                    model: models.categorias,
+                                    as: 'categoria',
+                                    required: true,
+                                    attributes: ['id', 'nombre'],
+                                    include: [
+                                        {
+                                            model: models.empresas,
+                                            as: 'empresa',
+                                            attributes: ['id', 'nombre']
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            model: models.plataformas,
+                            as: 'plataforma',
+                            attributes: ['id', 'code', 'plataforma']
+                        },
+                        {
+                            model: models.objetivos,
+                            as: 'objetivo',
+                            attributes: ['id', 'objetivo']
+                        },
+                    ]
+                }
+            ]
+        });
     };
 
     return TasksCards;
