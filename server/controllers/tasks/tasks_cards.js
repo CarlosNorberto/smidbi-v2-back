@@ -1,5 +1,5 @@
 const md = require('../../models');
-const { getObjetivoLogrado } = require('../../helps');
+const { getObjetivoLogrado, getExpirationStatus } = require('../../helps');
 
 const getById = async (req, res) => {
     try {
@@ -74,9 +74,11 @@ const getById = async (req, res) => {
         if(card.exp_date_year && card.exp_date_month && card.exp_date_day) {
             const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
             const currentDate = new Date();
-            card.dataValues.expired_message = expDate < currentDate ? 'Plazo vencido' : 'Vigente';
+            card.dataValues.expired_status = getExpirationStatus(card);
+            card.dataValues.expired_date = expDate;
         }else {
-            card.dataValues.expired_message = '';
+            card.dataValues.expired_status = '';
+            card.dataValues.expired_date = null;
         }
 
         res.status(200).json(card);
@@ -113,6 +115,7 @@ const update = async (req, res) => {
         const updateData = {
             ...req.body,
             completed: isCompleted,
+            date_completed: isCompleted ? new Date() : null,
         };
 
         if (responsibles) {            
@@ -178,6 +181,12 @@ const update = async (req, res) => {
         }
 
         await card.update(updateData);
+
+        if(card.exp_date_year && card.exp_date_month && card.exp_date_day) {
+            const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
+            card.dataValues.expired_status = getExpirationStatus(card);
+            card.dataValues.expired_date = expDate;
+        }
 
         return res.status(200).json(card);
 

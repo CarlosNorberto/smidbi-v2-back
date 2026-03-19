@@ -25,9 +25,28 @@ const getObjetivoLogrado = async (idReporte, idObjetivo) => {
     return objetivoLogrado;
 }
 
+const getExpirationStatus = (card) => {
+    // 'expired' | 'active' | 'expiring_soon'
+    if (card.exp_date_year && card.exp_date_month && card.exp_date_day) {
+        const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
+        const currentDate = new Date();
+        const timeDiff = expDate - currentDate;
+        const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+        if (timeDiff < 0) {
+            return 'expired';
+        } else if (daysDiff <= 1) {
+            return 'expiring_soon';
+        } else {
+            return 'active';
+        }        
+    }
+    return '';
+};
+
 module.exports = {
     getUploadUrl,
     getUploadPath,
     convertImageToBase64,
     getObjetivoLogrado,
+    getExpirationStatus,
 };
