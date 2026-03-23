@@ -5,7 +5,8 @@ const loadTracking = async (req, res) => {
         const { page = 1, limit = 10 } = req.query;
         const { user_ids, companie_ids, platform_id, month, year } = req.body;
         let general_where = {
-            activo: true
+            activo: true,
+            fecha_ini: { [md.Sequelize.Op.ne]: null },
         };
         let client_where = {};
         if (user_ids) {
@@ -109,6 +110,8 @@ const loadTracking = async (req, res) => {
             limit,
             offset: (page - 1) * limit,
             order: [
+                // order desc fecha_ini
+                ['fecha_ini', 'DESC'],
                 // order by company (empresa)
                 [{ model: md.campanas, as: 'campana' }, { model: md.categorias, as: 'categoria' }, { model: md.empresas, as: 'empresa' }, 'nombre', 'ASC'],
                 // order by category (categoria)
