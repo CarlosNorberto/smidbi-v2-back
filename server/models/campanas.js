@@ -186,7 +186,7 @@ module.exports = (sequelize, DataTypes) => {
         Campanas.belongsTo(models.categorias, {
             foreignKey: 'id_categoria',
             as: 'categoria',
-        });
+        });        
     };
     return Campanas;
 }

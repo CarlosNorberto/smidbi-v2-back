@@ -8,6 +8,7 @@ const plataformas = require('../controllers/plataformas');
 const objetivos = require('../controllers/objetivos');
 const segmentaciones = require('../controllers/segmentacion');
 const seguimiento = require('../controllers/seguimiento');
+const chat = require('../chat/chat.controller');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
@@ -106,6 +107,9 @@ module.exports = (app) => {
 
     // SEGUIMIENTO
     app.post(process.env.PREFIX_API + '/tracking/load', sessionAuth, seguimiento.loadTracking);
+
+    // CHATBOT
+    app.post(process.env.PREFIX_API + '/chatbot/question', sessionAuth, chat.handleChat);
 
     // GESTOR DE PROSPECTOS - LEAD MANAGER
 

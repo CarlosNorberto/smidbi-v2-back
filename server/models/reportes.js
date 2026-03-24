@@ -239,6 +239,17 @@ module.exports = (sequelize, DataTypes) => {
                 }
             ]
         });
+        Reportes.addScope('withObjectives', {
+            include: [
+                {
+                    model: models.objetivos,
+                    as: 'objetivo',
+                    attributes: {
+                        exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_creacion', 'fecha_modificacion', 'fecha_eliminacion']
+                    }
+                }
+            ]
+        });
         Reportes.addScope('withSecondaryObjectives', {
             include: [
                 {
