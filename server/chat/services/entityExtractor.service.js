@@ -1,54 +1,89 @@
 const openai = require('./openai.service');
 
-const entityExtractorPrompt = async (pregunta) => {
-    const reponse = await openai.chat.completions.create({
-        model: "gpt-4o",
+const INTENCIONES = [
+    'estado_campana',
+    'datos_diarios',
+    'proyeccion',
+    'reporte_completo',
+    'resumen_cliente',
+    'campanas_activas',
+    'campanas_con_problemas',
+    'campanas_por_vencer',
+    'listado_usuarios',
+    'presupuesto_global'
+];
+
+async function extractEntities(pregunta) {
+    const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
         messages: [
             {
-                role: "system",
-                content: `Del siguiente texto, extrae los nombres de campañas, empresas, plataformas y KPIs mencionados. 
-                Nota: Un cliente es igual a una empresa. 
-                Responde solo con un JSON con la siguiente estructura:
-                - nombre_empresa: string o null
-                - nombre_campana: string o null
-                - plataforma: string o null
-                - periodo: string o null (ejemplo: "último mes", "última semana", "hoy", etc.)
-                - intencion: una de estas opciones:
-                    "estado_campana"        → cómo va una campaña
-                    "proyeccion"            → si llegará a la meta
-                    "datos_diarios"         → valores día a día
-                    "reporte_completo"      → generar un informe
-                    "campanas_con_problemas"→ qué campañas van mal
-                    "resumen_cliente"       → resumen general de un cliente
+                role: 'system',
+                content: `Eres un extractor de entidades para un sistema interno
+                    de una agencia de marketing digital.
+                    Analiza la pregunta y devuelve SOLO un JSON con estos campos:
+                    
+                    - nombre_empresa: nombre del cliente/empresa (string o null)
+                    - nombre_campana: nombre de la campaña o reporte (string o null)
+                    - plataforma: Facebook, Instagram, Google, TikTok, YouTube (string o null)
+                    - anio: año mencionado como número entero (number o null)
+                        Ejemplos: "gestión 2025" → 2025, "del 2026" → 2026, "este año" → año actual
+                    - fecha_inicio: fecha de inicio del período consultado en formato YYYY-MM-DD (string o null)
+                        Solo para consultas de datos diarios:
+                        - "esta semana"   → lunes de la semana actual
+                        - "este mes"      → primer día del mes actual
+                        - "el último mes" → primer día del mes anterior
+                        - "enero 2026"    → "2026-01-01"
+                        - Si solo menciona año o gestión → null
 
-                Texto: "${pregunta}"
-                Responde solo con el JSON, sin explicaciones ni texto adicional.Si no puedes extraer alguno de los campos, pon null.`
+                    - fecha_final: fecha de fin del período consultado en formato YYYY-MM-DD (string o null)
+                        Solo para consultas de datos diarios:
+                        - "esta semana"   → hoy
+                        - "este mes"      → hoy
+                        - "el último mes" → último día del mes anterior
+                        - "enero 2026"    → "2026-01-31"
+                        - Si solo menciona año o gestión → null
+
+                    - intencion: UNA de estas exactas: ${INTENCIONES.join(', ')}
+
+                    Si no identificas una entidad con certeza usa null.
+                    Si la intención no encaja usa "estado_campana" como fallback.`
             },
             {
-                role: "user",
+                role: 'user',
                 content: pregunta
             }
         ],
-        max_tokens: 150
+        max_tokens: 200
     });
 
     try {
-        const raw = reponse.choices[0].message.content;
-        const clean = raw
-            .replace(/```json/g, '')
-            .replace(/```/g, '')
-            .trim();
-        return JSON.parse(clean);
-    } catch (error) {
-        console.error('Error al parsear el JSON del extractor de entidades:', error);
+        const raw = response.choices[0].message.content;
+        const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+
+        return {
+            nombre_empresa: parsed.nombre_empresa || null,
+            nombre_campana: parsed.nombre_campana || null,
+            plataforma: parsed.plataforma || null,
+            anio: parsed.anio || null,
+            fecha_inicio: parsed.fecha_inicio || null,
+            fecha_final: parsed.fecha_final || null,
+            intencion: INTENCIONES.includes(parsed.intencion)
+                ? parsed.intencion
+                : 'estado_campana'
+        };
+    } catch {
         return {
             nombre_empresa: null,
             nombre_campana: null,
             plataforma: null,
-            periodo: null,
+            anio: null,
+            fecha_inicio: null,
+            fecha_final: null,
             intencion: 'estado_campana'
         };
     }
 }
 
-module.exports = { entityExtractorPrompt };
+module.exports = { extractEntities, INTENCIONES };

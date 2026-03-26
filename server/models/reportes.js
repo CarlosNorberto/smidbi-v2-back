@@ -259,6 +259,15 @@ module.exports = (sequelize, DataTypes) => {
                 }
             ]
         });
+        Reportes.addScope('withDailyReport', {
+            include: [
+                {
+                    model: models.reporte_dia,
+                    as: 'reporte_dia',
+                    attributes: ['id', 'valor', 'dia', 'mes', 'anio', 'id_objetivo'],
+                }
+            ]
+        });
     };
 
     // Reportes.associate = (models) => {
