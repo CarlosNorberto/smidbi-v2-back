@@ -7,9 +7,9 @@ const toolDefinitions = [
             parameters: {
                 type: 'object',
                 properties: {
-                    campaign_id: { type: 'number', description: 'ID de la campaña' }
+                    campana_id: { type: 'number', description: 'ID de la campaña' }
                 },
-                required: ['campaign_id']
+                required: ['campana_id']
             }
         }
     },

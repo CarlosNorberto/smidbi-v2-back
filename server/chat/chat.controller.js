@@ -23,7 +23,7 @@ async function handleChat(req, res) {
         if (seleccion_id) {
             const datos = await executeTool([{
                 herramienta: getToolByTipo(seleccion_tipo, entidades.intencion),
-                parametros: { campana_id: seleccion_id }
+                parametros: { campaign_id: seleccion_id }
             }]);
             const respuesta = await generateResponse(pregunta, datos);
             return res.json({ tipo: 'respuesta', mensaje: respuesta });

@@ -109,7 +109,7 @@ module.exports = (app) => {
     app.post(process.env.PREFIX_API + '/tracking/load', sessionAuth, seguimiento.loadTracking);
 
     // CHATBOT
-    app.post(process.env.PREFIX_API + '/chatbot/question', sessionAuth, chat.handleChat);
+    app.post(process.env.PREFIX_API + '/chat_ia/question', sessionAuth, chat.handleChat);
 
     // GESTOR DE PROSPECTOS - LEAD MANAGER
 
