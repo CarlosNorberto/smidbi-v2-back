@@ -5,19 +5,8 @@ const getCatalog = async (entities, necesita) => {
     try {
         let empresa = null;
 
-        // ── Buscar empresa solo si la intención lo requiere ──
-        if (necesita.includes('empresa')) {
-
-            if (!entities.nombre_empresa) {
-                // La intención necesita empresa pero el empleado no la mencionó
-                return {
-                    ambiguo: false,
-                    empresa: null,
-                    campanas: [],
-                    sin_empresa: true
-                };
-            }
-
+        // ── Buscar empresa solo si se mencionó ──
+        if (necesita.includes('empresa') && entities.nombre_empresa) {
             const empresas = await md.empresas.findAll({
                 where: {
                     activo: true,
@@ -27,16 +16,19 @@ const getCatalog = async (entities, necesita) => {
             });
 
             if (empresas.length === 0) {
-                return {
-                    ambiguo: false,
-                    empresa: null,
-                    campanas: [],
-                    sin_resultados: true,
-                    tipo_no_encontrado: 'empresa'
-                };
-            }
-
-            if (empresas.length > 1) {
+                // ⚠️ No retornar aquí si hay nombre_campana
+                // Dejar empresa = null y continuar buscando por campaña
+                if (!entities.nombre_campana) {
+                    return {
+                        ambiguo: false,
+                        empresa: null,
+                        campanas: [],
+                        sin_resultados: true,
+                        tipo_no_encontrado: 'empresa'
+                    };
+                }
+                // Si hay nombre_campana, continúa sin empresa
+            } else if (empresas.length > 1) {
                 return {
                     ambiguo: true,
                     tipo_ambiguo: 'empresa',
@@ -46,12 +38,12 @@ const getCatalog = async (entities, necesita) => {
                         tipo: 'empresa'
                     }))
                 };
+            } else {
+                empresa = empresas[0];
             }
-
-            empresa = empresas[0];
         }
 
-        // ── Buscar campañas solo si la intención lo requiere ──
+        // ── Buscar campañas ──
         if (!necesita.includes('campana')) {
             return { ambiguo: false, empresa, campanas: [] };
         }
@@ -60,22 +52,23 @@ const getCatalog = async (entities, necesita) => {
         const whereCampana = {};
         const whereEmpresa = { activo: true };
 
+        // Solo filtrar por empresa si se encontró una
         if (empresa) {
             whereEmpresa.id = empresa.id;
         }
+
         if (entities.nombre_campana) {
             whereReporte.nombre = { [Op.iLike]: `%${entities.nombre_campana}%` };
         }
+
         if (entities.plataforma) {
             whereCampana.plataforma = { [Op.iLike]: `%${entities.plataforma}%` };
         }
-        if(entities.anio){
-            whereReporte.fecha_ini = { 
+
+        if (entities.anio) {
+            whereReporte.fecha_ini = {
                 [Op.between]: [`${entities.anio}-01-01`, `${entities.anio}-12-31`]
             };
-        }else if(entities.fecha_inicio && entities.fecha_final){
-            whereReporte.fecha_ini = { [Op.gte]: entities.fecha_inicio };
-            whereReporte.fecha_fin = { [Op.lte]: entities.fecha_final };
         }
 
         const reportes = await md.reportes.findAll({
@@ -99,7 +92,8 @@ const getCatalog = async (entities, necesita) => {
                                     model: md.empresas,
                                     as: 'empresa',
                                     required: true,
-                                    where: whereEmpresa,
+                                    // Si hay empresa la usamos, si no traemos todas
+                                    where: empresa ? { id: empresa.id } : { activo: true },
                                     attributes: ['id', 'nombre']
                                 }
                             ]
@@ -119,23 +113,25 @@ const getCatalog = async (entities, necesita) => {
             };
         }
 
+        // Múltiples resultados → mostrar opciones para elegir
         if (reportes.length > 1) {
             return {
                 ambiguo: true,
                 tipo_ambiguo: 'campana',
                 empresa,
-                // Este array es el que el FRONTEND usa para armar los botones
                 opciones: reportes.map(r => ({
                     id: r.id,
                     label: r.nombre,
                     detalle: `Emp.: ${r.campana?.categoria?.empresa?.nombre} › Cat.: ${r.campana?.categoria?.nombre} › Camp.: ${r.campana?.nombre}`,
-                    periodo: r.fecha_ini && r.fecha_fin ? `${formatDate(r.fecha_ini)} - ${formatDate(r.fecha_fin)}` : 'Sin periodo',
+                    periodo: r.fecha_ini && r.fecha_fin
+                        ? `${formatDate(r.fecha_ini)} - ${formatDate(r.fecha_fin)}`
+                        : 'Sin periodo',
                     tipo: 'reporte'
                 }))
             };
         }
 
-        // Caso ideal — resultado único
+        // Resultado único ✅
         return { ambiguo: false, empresa, campanas: reportes };
 
     } catch (error) {

@@ -39,13 +39,19 @@ async function generateNotFound({ pregunta, entidades, tipo_no_encontrado }) {
         No se encontró información en el sistema para la consulta del empleado.
         Redacta un mensaje corto y amigable informando esto.
         Sugiere verificar el nombre o los filtros usados.
-        Responde SOLO con: { "mensaje": "..." }`
+        Responde en formato JSON SOLO con: { "mensaje": "..." }`
             },
             {
                 role: 'user',
-                content: `Pregunta: "${pregunta}"
-        No se encontró: ${tipo_no_encontrado}
-        Entidades buscadas: ${JSON.stringify(entidades)}`
+                content: `Pregunta del empleado: "${pregunta}"
+  
+                        El sistema buscó una ${tipo_no_encontrado} y no encontró resultados.
+                    ${tipo_no_encontrado === 'empresa'
+                        ? `No existe ninguna empresa/cliente con el nombre "${entidades.nombre_empresa}" en el sistema.`
+                        : `No se encontraron campañas con el nombre "${entidades.nombre_campana}" en el sistema.`
+                    }
+  
+                    Informa esto claramente al empleado y sugiere verificar o añadir el dato correcto.`
             }
         ],
         max_tokens: 150
