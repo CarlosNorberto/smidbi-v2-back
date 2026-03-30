@@ -28,10 +28,10 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: 'id_reporte',
             as: 'reportes'
         });
-        // ReporteDia.belongsTo(models.objetivos, {
-        //     foreignKey: 'id_objetivo',
-        //     as: 'objetivos'
-        // });
+        ReporteDia.belongsTo(models.objetivos, {
+            foreignKey: 'id_objetivo',
+            as: 'objetivo'
+        });
     };
 
     return ReporteDia;

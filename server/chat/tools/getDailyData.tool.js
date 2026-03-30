@@ -14,22 +14,10 @@ const { Op } = require('sequelize');
  * @returns {Object} Un objeto con los datos diarios agrupados por objetivo, incluyendo total, promedio diario, mejor día y peor día para cada objetivo.
  * @throws {Error} Si no se encuentra ningún reporte activo para la campaña especificada o si ocurre un error al obtener los datos diarios.
  */
-const getDailyData = async (campaign_id, fecha_inicio, fecha_fin, objetivo = null) => {
+const getDailyData = async ({ campaign_id, start_date, end_date }) => {
     try {
-        const whereReporteDia = {};
 
-        // Filtrar por rango de fechas si se especifica
-        if (fecha_inicio && fecha_fin) {
-            // Convertimos a condiciones por dia/mes/anio
-            // porque tu tabla no tiene columna fecha directa
-            whereReporteDia[Op.or] = buildDateRangeCondition(fecha_inicio, fecha_fin);
-        }
-
-        // Filtrar por objetivo específico si se especifica
-        if (objetivo) {
-            whereReporteDia['$reporte_dia.id_objetivo$'] = objetivo;
-        }
-
+        // Primero traer el reporte con su objetivo principal
         const reporte = await md.reportes.scope(['withObjectives']).findOne({
             where: {
                 id: campaign_id,
@@ -37,19 +25,24 @@ const getDailyData = async (campaign_id, fecha_inicio, fecha_fin, objetivo = nul
             },
             include: [
                 {
-                    model: models.reporte_dia,
-                    as: 'reporte_dia',
-                    where: Object.keys(whereReporteDia).length ? whereReporteDia : undefined,
-                    required: false,
-                    attributes: ['id', 'valor', 'dia', 'mes', 'anio', 'id_objetivo'],
+                    model: md.campanas,
+                    as: 'campana',
+                    attributes: ['id', 'nombre'],
                     include: [
                         {
-                            model: models.objetivos,
-                            as: 'objetivo',
-                            attributes: ['id', 'objetivo']
+                            model: md.categorias,
+                            as: 'categoria',
+                            attributes: ['id', 'nombre'],
+                            include: [
+                                {
+                                    model: md.empresas,
+                                    as: 'empresa',
+                                    attributes: ['id', 'nombre']
+                                }
+                            ]
                         }
                     ]
-                }
+                },
             ]
         });
 
@@ -57,48 +50,98 @@ const getDailyData = async (campaign_id, fecha_inicio, fecha_fin, objetivo = nul
             return { error: 'No se encontró la campaña especificada' };
         }
 
-        // Agrupar por objetivo
-        const porObjetivo = {};
-        reporte.reporte_dia.forEach(dia => {
-            const nombreObjetivo = dia.objetivo?.objetivo || 'Sin objetivo';
-            if (!porObjetivo[nombreObjetivo]) {
-                porObjetivo[nombreObjetivo] = {
-                    objetivo: nombreObjetivo,
-                    datos: [],
-                    total: 0,
-                    promedio_diario: 0,
-                    mejor_dia: null,
-                    peor_dia: null
-                };
-            }
-            porObjetivo[nombreObjetivo].datos.push({
-                dia: dia.dia,
-                mes: dia.mes,
-                anio: dia.anio,
-                valor: dia.valor
-            });
+        const id_objetivo = reporte.objetivo?.id;
+
+        if (!id_objetivo) {
+            return { error: 'La campaña no tiene un objetivo definido' };
+        }
+
+        const whereReporteDia = {
+            id_objetivo
+        };
+
+        if (start_date && end_date) {
+            whereReporteDia[Op.or] = buildDateRangeCondition(start_date, end_date);
+        }
+
+        const dias = await md.reporte_dia.findAll({
+            where: {
+                id_reporte: campaign_id,
+                ...whereReporteDia
+            },
+            attributes: ['valor', 'dia', 'mes', 'anio'],
+            order: [['anio', 'ASC'], ['mes', 'ASC'], ['dia', 'ASC']]
         });
 
-        // Calcular métricas por objetivo
-        Object.values(porObjetivo).forEach(obj => {
-            const valores = obj.datos.map(d => d.valor);
-            obj.total = valores.reduce((a, b) => a + b, 0);
-            obj.promedio_diario = Math.round(obj.total / valores.length);
-            obj.mejor_dia = obj.datos.reduce((a, b) => a.valor > b.valor ? a : b);
-            obj.peor_dia = obj.datos.reduce((a, b) => a.valor < b.valor ? a : b);
-        });
+        if (!dias.length) {
+            return {
+                campaign_id,
+                campaign_name: reporte.nombre,
+                objetivo: reporte.objetivo.objetivo,
+                period: { start_date, end_date },
+                data: [],
+                metrics: null,                
+            };
+        }
+
+        // Calcular métricas
+        const valores = dias.map(d => d.valor);
+        const total = valores.reduce((a, b) => a + b, 0);
+        const mejorDia = dias.reduce((a, b) => a.valor > b.valor ? a : b);
+        const peorDia = dias.reduce((a, b) => a.valor < b.valor ? a : b);
 
         return {
-            campana_id: campaign_id,
-            campana_nombre: reporte.nombre,
-            periodo: { fecha_inicio, fecha_fin },
-            objetivos: Object.values(porObjetivo)
+            campaign_id,
+            campaign_name: reporte.nombre,
+            objetivo: reporte.objetivo.objetivo,
+            period: { start_date, end_date },
+            data: dias.map(d => ({
+                day: d.dia,
+                month: d.mes,
+                year: d.anio,
+                value: d.valor
+            })),
+            metrics: {
+                total,
+                daily_average: Math.round(total / dias.length),
+                best_day: {
+                    day: mejorDia.dia, month: mejorDia.mes,
+                    year: mejorDia.anio, value: mejorDia.valor
+                },
+                worst_day: {
+                    day: peorDia.dia, month: peorDia.mes,
+                    year: peorDia.anio, value: peorDia.valor
+                },
+                days_with_data: dias.length
+            },
+            link_to_report: `https://smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
         };
+
     } catch (error) {
-        console.error('Error al obtener los datos diarios:', error);
-        throw new Error('Error al obtener los datos diarios: ' + error.message);
+        console.error('Error in getDailyData:', error);
+        throw new Error('Error fetching daily data: ' + error.message);
     }
 };
+
+const buildDateRangeCondition = (start_date, end_date) => {
+    const conditions = [];
+
+    const start = new Date(start_date + 'T00:00:00');
+    const end = new Date(end_date + 'T00:00:00');
+
+    const current = new Date(start);
+
+    while (current <= end) {
+        conditions.push({
+            dia: current.getDate(),
+            mes: current.getMonth() + 1,
+            anio: current.getFullYear()
+        });
+        current.setDate(current.getDate() + 1);
+    }
+
+    return conditions;
+}
 
 module.exports = getDailyData;
 

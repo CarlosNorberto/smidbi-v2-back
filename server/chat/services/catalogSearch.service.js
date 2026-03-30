@@ -1,85 +1,87 @@
 const { Op } = require('sequelize');
 const md = require('../../models');
 
-const getCatalog = async (entities, necesita) => {
-    try {
-        let empresa = null;
+function formatDate(date) {
+    if (!date) return 'N/A';
+    const [year, month, day] = date.split('T')[0].split('-');
+    return `${day}/${month}/${year}`;
+}
 
-        // ── Buscar empresa solo si se mencionó ──
-        if (necesita.includes('empresa') && entities.nombre_empresa) {
-            const empresas = await md.empresas.findAll({
+const getCatalog = async (entities, needs) => {
+    try {
+        let company = null;
+
+        // ── Search company only if needed and mentioned ──
+        if (needs.includes('company') && entities.company_name) {
+            const companies = await md.empresas.findAll({
                 where: {
                     activo: true,
-                    nombre: { [Op.iLike]: `%${entities.nombre_empresa}%` }
+                    nombre: { [Op.iLike]: `%${entities.company_name}%` }
                 },
                 attributes: ['id', 'nombre']
             });
 
-            if (empresas.length === 0) {
-                // ⚠️ No retornar aquí si hay nombre_campana
-                // Dejar empresa = null y continuar buscando por campaña
-                if (!entities.nombre_campana) {
+            if (companies.length === 0) {
+                if (!entities.campaign_name) {
                     return {
-                        ambiguo: false,
-                        empresa: null,
-                        campanas: [],
-                        sin_resultados: true,
-                        tipo_no_encontrado: 'empresa'
+                        ambiguous: false,
+                        company: null,
+                        campaigns: [],
+                        not_found: true,
+                        not_found_type: 'company'
                     };
                 }
-                // Si hay nombre_campana, continúa sin empresa
-            } else if (empresas.length > 1) {
+                // Has campaign_name, continue without company
+            } else if (companies.length > 1) {
                 return {
-                    ambiguo: true,
-                    tipo_ambiguo: 'empresa',
-                    opciones: empresas.map(e => ({
-                        id: e.id,
-                        label: e.nombre,
-                        tipo: 'empresa'
+                    ambiguous: true,
+                    ambiguous_type: 'company',
+                    options: companies.map(c => ({
+                        id: c.id,
+                        label: c.nombre,
+                        type: 'company'
                     }))
                 };
             } else {
-                empresa = empresas[0];
+                company = companies[0];
             }
         }
 
-        // ── Buscar campañas ──
-        if (!necesita.includes('campana')) {
-            return { ambiguo: false, empresa, campanas: [] };
+        // ── Return early if campaigns not needed ──
+        if (!needs.includes('campaign')) {
+            return { ambiguous: false, company, campaigns: [] };
         }
 
-        const whereReporte = { activo: true };
-        const whereCampana = {};
-        const whereEmpresa = { activo: true };
+        // ── Build filters ──
+        const whereReport = { activo: true };
+        const whereCampaign = {};
+        const whereCompany = { activo: true };
 
-        // Solo filtrar por empresa si se encontró una
-        if (empresa) {
-            whereEmpresa.id = empresa.id;
+        if (company) {
+            whereCompany.id = company.id;
         }
-
-        if (entities.nombre_campana) {
-            whereReporte.nombre = { [Op.iLike]: `%${entities.nombre_campana}%` };
+        if (entities.campaign_name) {
+            whereReport.nombre = { [Op.iLike]: `%${entities.campaign_name}%` };
         }
-
-        if (entities.plataforma) {
-            whereCampana.plataforma = { [Op.iLike]: `%${entities.plataforma}%` };
+        if (entities.platform) {
+            whereCampaign.plataforma = { [Op.iLike]: `%${entities.platform}%` };
         }
-
-        if (entities.anio) {
-            whereReporte.fecha_ini = {
-                [Op.between]: [`${entities.anio}-01-01`, `${entities.anio}-12-31`]
+        if (entities.year) {
+            whereReport.fecha_ini = {
+                [Op.between]: [`${entities.year}-01-01`, `${entities.year}-12-31`]
             };
         }
 
-        const reportes = await md.reportes.findAll({
-            where: whereReporte,
+        // ── Main query ──
+        const reports = await md.reportes.findAll({
+            where: whereReport,
             attributes: ['id', 'nombre', 'id_campana', 'fecha_ini', 'fecha_fin'],
             include: [
                 {
                     model: md.campanas,
                     as: 'campana',
                     required: true,
-                    where: Object.keys(whereCampana).length ? whereCampana : undefined,
+                    where: Object.keys(whereCampaign).length ? whereCampaign : undefined,
                     attributes: ['id', 'nombre'],
                     include: [
                         {
@@ -92,8 +94,7 @@ const getCatalog = async (entities, necesita) => {
                                     model: md.empresas,
                                     as: 'empresa',
                                     required: true,
-                                    // Si hay empresa la usamos, si no traemos todas
-                                    where: empresa ? { id: empresa.id } : { activo: true },
+                                    where: whereCompany,
                                     attributes: ['id', 'nombre']
                                 }
                             ]
@@ -103,47 +104,39 @@ const getCatalog = async (entities, necesita) => {
             ]
         });
 
-        if (reportes.length === 0) {
+        if (reports.length === 0) {
             return {
-                ambiguo: false,
-                empresa,
-                campanas: [],
-                sin_resultados: true,
-                tipo_no_encontrado: 'campana'
+                ambiguous: false,
+                company,
+                campaigns: [],
+                not_found: true,
+                not_found_type: 'campaign'
             };
         }
 
-        // Múltiples resultados → mostrar opciones para elegir
-        if (reportes.length > 1) {
+        if (reports.length > 1) {
             return {
-                ambiguo: true,
-                tipo_ambiguo: 'campana',
-                empresa,
-                opciones: reportes.map(r => ({
+                ambiguous: true,
+                ambiguous_type: 'campaign',
+                company,
+                options: reports.map(r => ({
                     id: r.id,
                     label: r.nombre,
-                    detalle: `Emp.: ${r.campana?.categoria?.empresa?.nombre} › Cat.: ${r.campana?.categoria?.nombre} › Camp.: ${r.campana?.nombre}`,
-                    periodo: r.fecha_ini && r.fecha_fin
+                    detail: `Co.: ${r.campana?.categoria?.empresa?.nombre} › Cat.: ${r.campana?.categoria?.nombre} › Camp.: ${r.campana?.nombre}`,
+                    period: r.fecha_ini && r.fecha_fin
                         ? `${formatDate(r.fecha_ini)} - ${formatDate(r.fecha_fin)}`
-                        : 'Sin periodo',
-                    tipo: 'reporte'
+                        : 'No period',
+                    type: 'report'
                 }))
             };
         }
 
-        // Resultado único ✅
-        return { ambiguo: false, empresa, campanas: reportes };
+        return { ambiguous: false, company, campaigns: reports };
 
     } catch (error) {
-        console.error('Error en getCatalog:', error);
-        throw new Error('Error al obtener el catálogo');
+        console.error('Error in getCatalog:', error);
+        throw new Error('Error fetching catalog');
     }
 };
 
-const formatDate = (fecha) => {
-    if (!fecha) return 'N/A';
-    const [anio, mes, dia] = fecha.split('T')[0].split('-');
-    return `${dia}/${mes}/${anio}`;
-};
-
-module.exports = { getCatalog };
+module.exports = getCatalog;
