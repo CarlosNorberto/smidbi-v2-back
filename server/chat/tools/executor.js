@@ -6,39 +6,46 @@ const getActiveCampaigns = require('./getActiveCampaigns.tool');
 const getLowPerformance = require('./getLowPerformance.tool');
 const getExpiringCampaigns = require('./getExpiringCampaigns.tool');
 const generateCampaignReport = require('./generateCampaignReport.tool');
+const getUsers = require('./getUsers.tool');
+const getGlobalBudget = require('./getGlobalBudget.tools');
+const handleUnknown = require('./handleUnknown.tool');
 
 // Mapa de nombre → función
 const toolMap = {
-    get_campaign_status: getCampaignStatus,
-    get_daily_data: getDailyData,
-    get_projection: getProjection,
-    get_client_summary: getClientSummary,
-    get_active_campaigns: getActiveCampaigns,
-    get_low_performance: getLowPerformance,
-    get_expiring_campaigns: getExpiringCampaigns,
-    generate_campaign_report: generateCampaignReport
+    get_campaign_status:        getCampaignStatus,
+    get_daily_data:             getDailyData,
+    get_projection:             getProjection,
+    get_client_summary:         getClientSummary,
+    get_active_campaigns:       getActiveCampaigns,
+    get_low_performance:        getLowPerformance,
+    get_expiring_campaigns:     getExpiringCampaigns,
+    // generate_campaign_report:   generateCampaignReport,
+    generate_campaign_report:   getCampaignStatus,
+    get_users:                  getUsers,
+    get_global_budget:          getGlobalBudget,
+    handle_unknown:             handleUnknown
 };
 
-async function executeTool(calls) {
+const executeTool = async (calls) => {
     const resultados = {};
 
     for (const call of calls) {
-        const fn = toolMap[call.herramienta];
+        const fn = toolMap[call.tool];
 
         if (!fn) {
-            console.warn(`Tool no encontrado: ${call.herramienta}`);
-            resultados[call.herramienta] = {
-                error: `Herramienta "${call.herramienta}" no disponible`
+            console.warn(`Tool no encontrado: ${call.tool}`);
+            resultados[call.tool] = {
+                error: `Herramienta "${call.tool}" no disponible`
             };
             continue;
         }
 
         try {
-            resultados[call.herramienta] = await fn(call.parametros);
+            resultados[call.tool] = await fn(call.params);
         } catch (error) {
-            console.error(`Error ejecutando ${call.herramienta}:`, error);
-            resultados[call.herramienta] = {
-                error: `Error al ejecutar ${call.herramienta}: ${error.message}`
+            console.error(`Error ejecutando ${call.tool}:`, error);
+            resultados[call.tool] = {
+                error: `Error al ejecutar ${call.tool}: ${error.message}`
             };
         }
     }
@@ -46,4 +53,4 @@ async function executeTool(calls) {
     return resultados;
 }
 
-module.exports = { executeTool };
+module.exports = executeTool;

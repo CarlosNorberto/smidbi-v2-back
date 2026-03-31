@@ -1,103 +1,77 @@
-const { extractEntities } = require('./services/entityExtractor.service');
-const { getNecesita } = require('./services/contextRouter');
-const { getCatalog } = require('./services/catalogSearch.service');
+const extractEntities = require('./services/entityExtractor.service');
+const getCatalog = require('./services/catalogSearch.service');
 const { generateClarification,
     generateNotFound } = require('./services/clarification.service');
-const { interpretQuestion } = require('./services/interpreter.service');
-const { generateResponse } = require('./services/responder.service');
-const { executeTool } = require('./tools/executor');
+const generateResponse = require('./services/responder.service');
+const executeTool = require('./tools/executor');
+const { getNeeds, getTool } = require('./config/intents');
 
 async function handleChat(req, res) {
     try {
-        const { pregunta, seleccion_id, seleccion_tipo } = req.body;
+        const { question, selection_id, selection_type } = req.body;
 
-        if (!pregunta?.trim()) {
-            return res.status(400).json({ error: 'La pregunta es requerida' });
+        if (!question?.trim()) {
+            return res.status(400).json({ error: 'Question is required' });
         }
 
-        // ── PASO 1: Extraer intención y entidades de la pregunta ──
-        const entidades = await extractEntities(pregunta);
+        // ── 1. Extract intent and entities from question ──
+        const entities = await extractEntities(question);
+        const needs = getNeeds(entities.intent);
+        const tool = getTool(entities.intent);
 
-        // ── PASO 2: Si el empleado ya seleccionó de una lista ──
-        // (segunda vuelta tras una aclaración)
-        if (seleccion_id) {
-            const datos = await executeTool([{
-                herramienta: getToolByTipo(seleccion_tipo, entidades.intencion),
-                parametros: { campaign_id: seleccion_id }
-            }]);
-            const respuesta = await generateResponse(pregunta, datos);
-            return res.json({ tipo: 'respuesta', mensaje: respuesta });
+        // ── 2. Employee already selected from a list ──
+        if (selection_id) {
+            const data = await executeTool([{ tool, params: { campaign_id: selection_id } }]);
+            const response = await generateResponse(question, data);
+            return res.json({ type: 'response', message: response });
         }
 
-        // ── PASO 3: Saber qué contexto necesita esta intención ──
-        const necesita = getNecesita(entidades.intencion);
+        // ── 3. No context needed → go directly to tool ──
+        if (needs.length === 0) {
+            const data = await executeTool([{ tool, params: { entities } }]);
+            const response = await generateResponse(question, data);
+            return res.status(200).json({ type: 'response', message: response });
+        }
 
-        // ── PASO 4: Buscar contexto en BD solo si hace falta ──
-        let catalogo = { empresa: null, campanas: [] };
+        // ── 4. Search context in DB ──
+        const catalog = await getCatalog(entities, needs);
 
-        if (necesita.length > 0) {
-            catalogo = await getCatalog(entidades, necesita);
+        if (catalog.ambiguous) {
+            const message = await generateClarification({
+                question,
+                options: catalog.options,
+                ambiguous_type: catalog.ambiguous_type
+            });
+            return res.json({ type: 'clarification', message, options: catalog.options });
+        }
 
-            // Ambigüedad — el empleado necesita elegir
-            if (catalogo.ambiguo) {
-                const mensaje = await generateClarification({
-                    pregunta,
-                    opciones: catalogo.opciones,
-                    tipo_ambiguo: catalogo.tipo_ambiguo
-                });
-                return res.json({
-                    tipo: 'aclaracion',
-                    mensaje,
-                    // El frontend usa este array para armar los botones
-                    opciones: catalogo.opciones
-                });
+        if (catalog.not_found) {
+            const message = await generateNotFound({
+                question,
+                entities,
+                not_found_type: catalog.not_found_type
+            });
+            return res.json({ type: 'not_found', message });
+        }
+
+        // ── 5. Execute tool with resolved context ──
+        const data = await executeTool([{
+            tool,
+            params: {
+                campaign_id: catalog.campaigns[0]?.id,
+                company_id: catalog.company?.id,
+                entities
             }
+        }]);
 
-            // Sin resultados
-            if (catalogo.sin_resultados || catalogo.sin_empresa) {
-                const mensaje = await generateNotFound({
-                    pregunta,
-                    entidades,
-                    tipo_no_encontrado: catalogo.tipo_no_encontrado || 'empresa'
-                });
-                return res.json({ tipo: 'no_encontrado', mensaje });
-            }
-        }
-
-        // ── PASO 5: La IA elige qué herramienta usar ──
-        const interpretacion = await interpretQuestion(
-            pregunta,
-            catalogo,
-            entidades.intencion
-        );
-
-        if (interpretacion.tipo === 'respuesta_directa') {
-            return res.json({ tipo: 'respuesta', mensaje: interpretacion.mensaje });
-        }
-
-        // ── PASO 6: Ejecutar la herramienta elegida ──
-        const datos = await executeTool(interpretacion.calls);
-
-        // ── PASO 7: La IA redacta la respuesta final ──
-        const respuesta = await generateResponse(pregunta, datos);
-        return res.json({ tipo: 'respuesta', mensaje: respuesta });
+        // ── 6. Generate final response ──
+        const response = await generateResponse(question, data);
+        return res.json({ type: 'response', message: response });
 
     } catch (error) {
-        console.error('Error en chat:', error);
-        res.status(500).json({ error: 'Error procesando la consulta' });
+        console.error('Error in chat controller:', error);
+        res.status(500).json({ error: 'Error processing request' });
     }
-}
-
-// Mapea la intención al tool correcto cuando viene seleccion_id
-function getToolByTipo(seleccion_tipo, intencion) {
-    if (seleccion_tipo === 'empresa') return 'get_client_summary';
-    const mapaIntencion = {
-        'estado_campana': 'get_campaign_status',
-        'datos_diarios': 'get_daily_data',
-        'proyeccion': 'get_projection',
-        'reporte_completo': 'generate_campaign_report'
-    };
-    return mapaIntencion[intencion] || 'get_campaign_status';
 }
 
 module.exports = { handleChat };

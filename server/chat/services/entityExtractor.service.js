@@ -1,19 +1,7 @@
 const openai = require('./openai.service');
+const { getIntentNames, getIntentDescriptions } = require('../config/intents');
 
-const INTENCIONES = [
-    'estado_campana',
-    'datos_diarios',
-    'proyeccion',
-    'reporte_completo',
-    'resumen_cliente',
-    'campanas_activas',
-    'campanas_con_problemas',
-    'campanas_por_vencer',
-    'listado_usuarios',
-    'presupuesto_global'
-];
-
-async function extractEntities(pregunta) {
+const extractEntities = async (question) => {
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -22,37 +10,28 @@ async function extractEntities(pregunta) {
                 role: 'system',
                 content: `Eres un extractor de entidades para un sistema interno
                     de una agencia de marketing digital.
-                    Analiza la pregunta y devuelve SOLO un JSON con estos campos:
-                    
-                    - nombre_empresa: nombre del cliente/empresa (string o null)
-                    - nombre_campana: nombre de la campaña o reporte (string o null)
-                    - plataforma: Facebook, Instagram, Google, TikTok, YouTube (string o null)
-                    - anio: año mencionado como número entero (number o null)
-                        Ejemplos: "gestión 2025" → 2025, "del 2026" → 2026, "este año" → año actual
-                    - fecha_inicio: fecha de inicio del período consultado en formato YYYY-MM-DD (string o null)
-                        Solo para consultas de datos diarios:
-                        - "esta semana"   → lunes de la semana actual
-                        - "este mes"      → primer día del mes actual
-                        - "el último mes" → primer día del mes anterior
-                        - "enero 2026"    → "2026-01-01"
-                        - Si solo menciona año o gestión → null
 
-                    - fecha_final: fecha de fin del período consultado en formato YYYY-MM-DD (string o null)
-                        Solo para consultas de datos diarios:
-                        - "esta semana"   → hoy
-                        - "este mes"      → hoy
-                        - "el último mes" → último día del mes anterior
-                        - "enero 2026"    → "2026-01-31"
-                        - Si solo menciona año o gestión → null
+                    Tu tarea tiene DOS partes:
 
-                    - intencion: UNA de estas exactas: ${INTENCIONES.join(', ')}
+                    ## PARTE 1 - Extrae estas entidades del texto:
+                    - company_name: nombre de la empresa/cliente (string o null)
+                    - campaign_name: nombre de la campaña o reporte (string o null)
+                    - platform: Facebook, Instagram, Google, TikTok, YouTube (string o null)
+                    - period: referencia de tiempo mencionada (string o null)
+                    - year: año mencionado como número entero (number o null)
+                    - start_date: fecha inicio inferida en YYYY-MM-DD (string o null)
+                    - end_date: fecha fin inferida en YYYY-MM-DD (string o null)
 
-                    Si no identificas una entidad con certeza usa null.
-                    Si la intención no encaja usa "estado_campana" como fallback.`
+                    ## PARTE 2 - Identifica la intención:
+                    La intención principal. Elige según descripción y palabras clave de:
+
+                    - intent: ${getIntentDescriptions()}
+
+                    Responde SOLO con el JSON, sin explicación.`
             },
             {
                 role: 'user',
-                content: pregunta
+                content: question
             }
         ],
         max_tokens: 200
@@ -63,27 +42,28 @@ async function extractEntities(pregunta) {
         const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
 
         return {
-            nombre_empresa: parsed.nombre_empresa || null,
-            nombre_campana: parsed.nombre_campana || null,
-            plataforma: parsed.plataforma || null,
-            anio: parsed.anio || null,
-            fecha_inicio: parsed.fecha_inicio || null,
-            fecha_final: parsed.fecha_final || null,
-            intencion: INTENCIONES.includes(parsed.intencion)
-                ? parsed.intencion
-                : 'estado_campana'
+            company_name: parsed.company_name || null,
+            campaign_name: parsed.campaign_name || null,
+            platform: parsed.platform || null,
+            period: parsed.period || null,
+            year: parsed.year || null,
+            start_date: parsed.start_date || null,
+            end_date: parsed.end_date || null,
+            intent: getIntentNames().includes(parsed.intent)
+                ? parsed.intent
+                : 'campaign_status'
         };
     } catch {
         return {
-            nombre_empresa: null,
-            nombre_campana: null,
-            plataforma: null,
-            anio: null,
-            fecha_inicio: null,
-            fecha_final: null,
-            intencion: 'estado_campana'
+            company_name: null,
+            campaign_name: null,
+            platform: null,
+            year: null,
+            start_date: null,
+            end_date: null,
+            intent: 'campaign_status'
         };
     }
 }
 
-module.exports = { extractEntities, INTENCIONES };
+module.exports = extractEntities;
