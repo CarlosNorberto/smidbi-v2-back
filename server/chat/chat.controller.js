@@ -30,7 +30,7 @@ async function handleChat(req, res) {
         if (needs.length === 0) {
             const data = await executeTool([{ tool, params: { entities } }]);
             const response = await generateResponse(question, data);
-            return res.json({ type: 'response', message: response });
+            return res.status(200).json({ type: 'response', message: response });
         }
 
         // ── 4. Search context in DB ──
