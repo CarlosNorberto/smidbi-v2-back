@@ -6,7 +6,7 @@ const contextRouter = {
     'proyeccion': ['empresa', 'campana'],
     'reporte_completo': ['empresa', 'campana'],
     'resumen_cliente': ['empresa'],
-    'campanas_activas': ['empresa'],
+    'campanas_activas': [],
     'campanas_con_problemas': [],
     'campanas_por_vencer': [],
     'listado_usuarios': [],
