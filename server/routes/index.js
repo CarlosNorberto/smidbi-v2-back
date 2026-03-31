@@ -8,6 +8,7 @@ const plataformas = require('../controllers/plataformas');
 const objetivos = require('../controllers/objetivos');
 const segmentaciones = require('../controllers/segmentacion');
 const seguimiento = require('../controllers/seguimiento');
+const utilities = require('../controllers/utilities');
 const chat = require('../chat/chat.controller');
 
 // multer for file uploads (if needed in the future)
@@ -107,6 +108,10 @@ module.exports = (app) => {
 
     // SEGUIMIENTO
     app.post(process.env.PREFIX_API + '/tracking/load', sessionAuth, seguimiento.loadTracking);
+
+    // UTILIDADES
+    app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
+    app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
 
     // CHATBOT
     app.post(process.env.PREFIX_API + '/chat_ia/question', sessionAuth, chat.handleChat);

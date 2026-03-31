@@ -100,7 +100,7 @@ const getCampaignStatus = async ({ campaign_id }) => {
                 porcentaje: (campaign.get('sum_total') / campaign.objetivo_proyectado * 100).toFixed(2) || 0
             },
             plataforma: campaign.plataforma ? campaign.plataforma.plataforma : 'N/A',
-            link_to_report: `https://smidbi.site/admin/${campaign.campana.categoria.empresa.id}/${campaign.campana.categoria.id}/${campaign.campana.id}/${campaign.id}/report/edit`
+            link_to_report: `https://v2.smidbi.site/admin/${campaign.campana.categoria.empresa.id}/${campaign.campana.categoria.id}/${campaign.campana.id}/${campaign.id}/report/edit`
         }
     } catch (error) {
         console.error('Error al obtener el estado de la campaña:', error);

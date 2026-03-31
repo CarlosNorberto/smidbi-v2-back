@@ -67,7 +67,7 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (id, done) => {
     try {        
-        let user = await md.usuarios.findByPk(id, { attributes: ['id', 'email', 'nombre', 'time_zone'] });
+        let user = await md.usuarios.scope('withRole').findByPk(id, { attributes: ['id', 'email', 'nombre', 'time_zone'] });
         done(null, user);
     } catch (error) {
         done(error, null);

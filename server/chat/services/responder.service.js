@@ -63,6 +63,18 @@ const generateResponse = async (question, data) => {
                         - Días anteriores en 0 sí son una alerta.
                         - 7 días o menos: puedes listarlos.
 
+                    4. TÉRMINOS TÉCNICOS:
+                        - NUNCA menciones nombres de campos como: days_remaining, kpi_progress, 
+                            time_progress, gap, out_of_scope, campaign_id, company_id
+                        - Tradúcelos a lenguaje natural:
+                            days_remaining → "días restantes"
+                            vence_hoy: true → "vence hoy"
+                            status: "behind" → "está por debajo de su meta"
+                            status: "on_track" → "va bien"
+                            status: "at_risk" → "está en riesgo"
+                    
+                    
+
                     No ofrezcas información adicional, solo responde con lo que se te dio y lo que se te preguntó. Si no tienes suficiente información, dilo claramente.
                     `
             },

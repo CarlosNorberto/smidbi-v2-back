@@ -114,7 +114,7 @@ const getDailyData = async ({ campaign_id, start_date, end_date }) => {
                 },
                 days_with_data: dias.length
             },
-            link_to_report: `https://smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+            link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
         };
 
     } catch (error) {

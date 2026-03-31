@@ -42,13 +42,17 @@ const getAll = async (req, res) => {
 const getAllByUsers = async (req, res) => {
     try {        
         const { user_ids } = req.params;
-        const { page = 1, limit = 10, name = null } = req.query;        
-        const offset = (page - 1) * limit;        
+        const { page = 1, limit = 10, name = null, company_id = null } = req.query;        
+        const offset = (page - 1) * limit;
         let where = {
             id_usuario: {
                 [md.Sequelize.Op.in]: user_ids.split(',')
             },
             activo: true
+        }
+        if (company_id) {
+            where.id = company_id;
+            delete where.activo;
         }
         if (name) {
             where.nombre = {

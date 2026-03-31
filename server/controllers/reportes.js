@@ -89,7 +89,7 @@ const getAll = async (req, res) => {
             }
         }
         const reportes = await md.reportes.findAndCountAll({
-            where: where,            
+            where: where,
             include: [{
                 model: md.campanas,
                 as: 'campana',
@@ -503,8 +503,8 @@ const saveUpdateHours = async (req, res) => {
 const getViewAdsByReportId = async (req, res) => {
     try {
         const { report_id } = req.params;
-        const { width, quality='auto', fetch_format='auto' } = req.query;
-        const options = {            
+        const { width, quality = 'auto', fetch_format = 'auto' } = req.query;
+        const options = {
             quality,
             fetch_format,
             secure: true,
@@ -563,7 +563,7 @@ const uploadAdImage = async (req, res) => {
         const b64 = Buffer.from(file.buffer).toString('base64');
         const dataURI = `data:${file.mimetype};base64,${b64}`;
         const resp_cloudinary = await cloudinary.uploader.upload(dataURI, { folder: 'SMID/VIEW ADS' });
-        
+
         await md.view_ads.create({
             id_reporte: parseInt(report_id),
             usuario_creacion: req.user.id,
@@ -796,7 +796,7 @@ const reporteDiasReview = async (req, res) => {
 module.exports = {
     getById,
     getAll,
-    getAllByCampaign,    
+    getAllByCampaign,
     saveUpdate,
     enableDisableReport,
     deleteReport,
@@ -815,6 +815,6 @@ module.exports = {
     saveUpdateViewAds,
     uploadAdImage,
     deleteAdImage,
-    getMapByReportID,
+    getMapByReportID,    
     reporteDiasReview,
 };

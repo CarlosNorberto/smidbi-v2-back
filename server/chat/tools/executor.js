@@ -12,17 +12,16 @@ const handleUnknown = require('./handleUnknown.tool');
 
 // Mapa de nombre → función
 const toolMap = {
-    get_campaign_status:        getCampaignStatus,
-    get_daily_data:             getDailyData,
-    get_projection:             getProjection,
-    get_client_summary:         getClientSummary,
-    get_active_campaigns:       getActiveCampaigns,
-    get_low_performance:        getLowPerformance,
-    get_expiring_campaigns:     getExpiringCampaigns,
-    // generate_campaign_report:   generateCampaignReport,
-    generate_campaign_report:   getCampaignStatus,
-    get_users:                  getUsers,
-    get_global_budget:          getGlobalBudget,
+    get_campaign_status:        getCampaignStatus,          //Implementado
+    get_daily_data:             getDailyData,               //Implementado
+    get_projection:             getProjection,              //Implementado
+    get_client_summary:         getClientSummary,           //Implementado
+    get_active_campaigns:       getActiveCampaigns,         //No Implementado
+    get_low_performance:        getLowPerformance,          //Implementado
+    get_expiring_campaigns:     getExpiringCampaigns,       //No Implementado    
+    generate_campaign_report:   getCampaignStatus,          //Se reutiliza getCampaignStatus para este
+    get_users:                  getUsers,                   //No Implementado
+    get_global_budget:          getGlobalBudget,            //No Implementado
     handle_unknown:             handleUnknown
 };
 

@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const getLowPerformance = async () => {
     try {
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
         // Traer todas las campañas activas con fecha vigente
         const reportes = await md.reportes.findAll({
@@ -77,7 +78,7 @@ const getLowPerformance = async () => {
             const fechaFin = new Date(reporte.fecha_fin + 'T00:00:00');
             const totalDays = Math.ceil((fechaFin - fechaIni) / (1000 * 60 * 60 * 24)) + 1;
             const daysElapsed = Math.ceil((today - fechaIni) / (1000 * 60 * 60 * 24));
-            const daysRemaining = Math.ceil((fechaFin - today) / (1000 * 60 * 60 * 24));
+            const daysRemaining = Math.ceil((fechaFin - today) / (1000 * 60 * 60 * 24)) + 1;
 
             const goal = parseFloat(reporte.objetivo_proyectado) || 0;
             const current = parseFloat(sumResult?.total) || 0;
@@ -106,7 +107,7 @@ const getLowPerformance = async () => {
                     total: parseFloat(reporte.presupuesto) || 0,
                     executed: parseFloat(reporte.ejecutado) || 0
                 },
-                link_to_report: `https://smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+                link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
             };
         }));
 
