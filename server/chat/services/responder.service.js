@@ -1,6 +1,6 @@
 const openai = require('./openai.service');
 
-const generateResponse = async (question, data) => {
+const generateResponse = async (question, data, fromSelection = false) => {
 
     const isOutOfScope = Object.values(data).some(d => d?.out_of_scope === true);
 
@@ -82,6 +82,14 @@ const generateResponse = async (question, data) => {
                             - Campaña 2 — vence hoy/en N días
                         - Al final muestra el total general
                         - NO omitas ninguna empresa del listado
+
+                    ${fromSelection
+                    && `6. SELECCIÓN DE CAMPAÑA:
+                            El usuario seleccionó esta campaña de una lista de opciones.
+                            Responde directamente con los datos de la campaña.
+                            NUNCA menciones si el nombre coincide o no con la búsqueda original.
+                            NUNCA uses frases como "no coincide exactamente" o "mencionas".`
+                    }
 
                     No ofrezcas información adicional, solo responde con lo que se te dio y lo que se te preguntó. Si no tienes suficiente información, dilo claramente.
                     `

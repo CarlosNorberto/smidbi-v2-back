@@ -6,7 +6,6 @@ const getActiveCampaigns = require('./getActiveCampaigns.tool');
 const getLowPerformance = require('./getLowPerformance.tool');
 const getExpiringCampaigns = require('./getExpiringCampaigns.tool');
 const generateCampaignReport = require('./generateCampaignReport.tool');
-const getUsers = require('./getUsers.tool');
 const getGlobalBudget = require('./getGlobalBudget.tools');
 const handleUnknown = require('./handleUnknown.tool');
 
@@ -16,11 +15,10 @@ const toolMap = {
     get_daily_data:             getDailyData,               //Implementado
     get_projection:             getProjection,              //Implementado
     get_client_summary:         getClientSummary,           //Implementado
-    get_active_campaigns:       getActiveCampaigns,         //No Implementado
+    get_active_campaigns:       getActiveCampaigns,         //Implementado
     get_low_performance:        getLowPerformance,          //Implementado
-    get_expiring_campaigns:     getExpiringCampaigns,       //No Implementado    
-    generate_campaign_report:   getCampaignStatus,          //Se reutiliza getCampaignStatus para este
-    get_users:                  getUsers,                   //No Implementado
+    get_expiring_campaigns:     getExpiringCampaigns,       //Implementado    
+    generate_campaign_report:   getCampaignStatus,          //Se reutiliza getCampaignStatus para este    
     get_global_budget:          getGlobalBudget,            //No Implementado
     handle_unknown:             handleUnknown
 };

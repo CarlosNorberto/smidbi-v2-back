@@ -4,7 +4,7 @@ const { generateClarification,
     generateNotFound } = require('./services/clarification.service');
 const generateResponse = require('./services/responder.service');
 const executeTool = require('./tools/executor');
-const { getNeeds, getTool } = require('./config/intents');
+const { getNeeds, getTool, getNeutralQuestion } = require('./config/intents');
 
 async function handleChat(req, res) {
     try {
@@ -22,7 +22,8 @@ async function handleChat(req, res) {
         // ── 2. Employee already selected from a list ──
         if (selection_id) {
             const data = await executeTool([{ tool, params: { campaign_id: selection_id } }]);
-            const response = await generateResponse(question, data);
+            const neutralQuestion = getNeutralQuestion(entities.intent);
+            const response = await generateResponse(neutralQuestion, data, true);
             return res.json({ type: 'response', message: response });
         }
 
