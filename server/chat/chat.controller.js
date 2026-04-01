@@ -28,7 +28,7 @@ async function handleChat(req, res) {
 
         // ── 3. No context needed → go directly to tool ──
         if (needs.length === 0) {
-            const data = await executeTool([{ tool, params: { entities } }]);
+            const data = await executeTool([{ tool, params: { entities, days_ahead: entities.days_ahead ?? 7 } }]);
             const response = await generateResponse(question, data);
             return res.status(200).json({ type: 'response', message: response });
         }

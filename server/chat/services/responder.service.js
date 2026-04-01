@@ -73,7 +73,15 @@ const generateResponse = async (question, data) => {
                             status: "on_track" → "va bien"
                             status: "at_risk" → "está en riesgo"
                     
-                    
+                    5. CAMPAÑAS POR VENCER:
+                        Cuando respondas sobre campañas por vencer:
+                        - SIEMPRE muestra el listado agrupado por empresa
+                        - Formato por empresa:
+                            **Nombre Empresa** (N campañas)
+                            - Campaña 1 — vence hoy/en N días
+                            - Campaña 2 — vence hoy/en N días
+                        - Al final muestra el total general
+                        - NO omitas ninguna empresa del listado
 
                     No ofrezcas información adicional, solo responde con lo que se te dio y lo que se te preguntó. Si no tienes suficiente información, dilo claramente.
                     `

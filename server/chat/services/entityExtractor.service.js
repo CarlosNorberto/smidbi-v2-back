@@ -21,6 +21,15 @@ const extractEntities = async (question) => {
                     - year: año mencionado como número entero (number o null)
                     - start_date: fecha inicio inferida en YYYY-MM-DD (string o null)
                     - end_date: fecha fin inferida en YYYY-MM-DD (string o null)
+                    - days_ahead: número de días hacia adelante para buscar campañas por vencer (number)
+                      Reglas:
+                      - "esta semana" o sin periodo → 7
+                      - "hoy" → 0
+                      - "este mes" → 30
+                      - "en 2 días" → 2
+                      - "en 3 días" → 3
+                      - "los próximos N días" → N
+                      - Si no se menciona periodo → 7
 
                     ## PARTE 2 - Identifica la intención:
                     La intención principal. Elige según descripción y palabras clave de:
@@ -49,6 +58,7 @@ const extractEntities = async (question) => {
             year: parsed.year || null,
             start_date: parsed.start_date || null,
             end_date: parsed.end_date || null,
+            days_ahead: parsed.days_ahead ?? 7,
             intent: getIntentNames().includes(parsed.intent)
                 ? parsed.intent
                 : 'campaign_status'

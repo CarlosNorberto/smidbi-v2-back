@@ -37,7 +37,7 @@ const INTENTS = {
     expiring_campaigns: {
         needs: [],
         tool: 'get_expiring_campaigns',
-        description: 'Campañas que están por expirar pronto'
+        description: 'Campañas que están por expirar o vencer pronto'
     },
     user_list: {
         needs: [],
