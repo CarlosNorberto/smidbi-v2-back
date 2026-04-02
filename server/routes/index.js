@@ -45,7 +45,7 @@ module.exports = (app) => {
     // EMPRESAS
     app.get(process.env.PREFIX_API + '/companies/one/:id', sessionAuth, empresas.getById);
     app.get(process.env.PREFIX_API + '/companies/all', sessionAuth, empresas.getAll);
-    app.get(process.env.PREFIX_API + '/companies/users/:user_ids', sessionAuth, empresas.getAllByUsers);
+    app.get(process.env.PREFIX_API + '/companies/users', sessionAuth, empresas.getAllByUsers);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
 

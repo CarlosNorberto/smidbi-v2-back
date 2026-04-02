@@ -21,8 +21,8 @@ const getById = async (req, res) => {
 
 const getAll = async (req, res) => {
     try {        
-        const { name = null } = req.query;        
-        let where = { activo: true };
+        const { name = null, activo = true } = req.query;        
+        let where = { activo: activo };
         if (name) {
             where.nombre = {
                 [md.Sequelize.Op.iLike]: `%${name}%`
@@ -41,18 +41,16 @@ const getAll = async (req, res) => {
 
 const getAllByUsers = async (req, res) => {
     try {        
-        const { user_ids } = req.params;
-        const { page = 1, limit = 10, name = null, company_id = null } = req.query;        
-        const offset = (page - 1) * limit;
+        const { user_ids, page = 1, limit = 10, name = null, company_id = null, active = true } = req.query;        
+        const offset = (page - 1) * limit;        
         let where = {
             id_usuario: {
                 [md.Sequelize.Op.in]: user_ids.split(',')
             },
-            activo: true
+            activo: active
         }
         if (company_id) {
-            where.id = company_id;
-            delete where.activo;
+            where.id = company_id;            
         }
         if (name) {
             where.nombre = {
