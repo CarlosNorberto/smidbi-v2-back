@@ -1,7 +1,8 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const { getUserFilter } = require('../helps/helps');
 
-const getExpiringCampaigns = async ({ days_ahead = 7 }) => {
+const getExpiringCampaigns = async ({ days_ahead = 7, include_inactive = false, currentUser }) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -11,7 +12,8 @@ const getExpiringCampaigns = async ({ days_ahead = 7 }) => {
 
         const reportes = await md.reportes.findAll({
             where: {
-                activo: true,                
+                ...(include_inactive ? {} : { activo: true }),
+                ...getUserFilter(currentUser),
                 fecha_ini: { [Op.lte]: today },
                 fecha_fin: {
                     [Op.gte]: today,

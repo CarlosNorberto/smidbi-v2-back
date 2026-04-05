@@ -1,14 +1,19 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const { getUserFilter } = require('../helps/helps');
 
-const getProjection = async ({campaign_id}) => {
+const getProjection = async ({campaign_id, include_inactive = false, currentUser }) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         // ── 1. Traer el reporte con su objetivo ──
         const reporte = await md.reportes.findOne({
-            where: { id: campaign_id, activo: true },
+            where: { 
+                id: campaign_id, 
+                ...(include_inactive ? {} : { activo: true }),
+                ...getUserFilter(currentUser)
+            },
             attributes: [
                 'id', 'nombre', 'presupuesto', 'objetivo_proyectado',
                 'ejecutado', 'fecha_ini', 'fecha_fin', 'ctr', 'cp'

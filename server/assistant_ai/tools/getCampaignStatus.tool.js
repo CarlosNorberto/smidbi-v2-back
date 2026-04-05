@@ -1,11 +1,13 @@
 const md = require('../../models');
+const { getUserFilter } = require('../helps/helps');
 
-const getCampaignStatus = async ({ campaign_id }) => {
+const getCampaignStatus = async ({ campaign_id, include_inactive = false, currentUser }) => {
     try {
         const campaign = await md.reportes.scope(['withObjectives', 'withPlatform']).findOne({
             where: {
                 id: campaign_id,
-                activo: true
+                ...(include_inactive ? {} : { activo: true }),
+                ...getUserFilter(currentUser)
             },
             attributes: {
                 include: [

@@ -1,23 +1,24 @@
-const md = require('../../models');
+// tools/getMyCampaigns.tool.js
 const { Op } = require('sequelize');
+const md = require('../../models');
+const { getUserFilter } = require('../helps/helps');
 
-const getLowPerformance = async () => {
+const getMyCampaigns = async ({ currentUser }) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Traer todas las campañas activas con fecha vigente
         const reportes = await md.reportes.findAll({
             where: {
                 activo: true,
                 seguimiento_activo: true,
                 fecha_ini: { [Op.lte]: today },
-                fecha_fin: { [Op.gte]: today }
+                fecha_fin: { [Op.gte]: today },
+                ...getUserFilter(currentUser)
             },
             attributes: [
-                'id', 'nombre', 'objetivo_proyectado',
-                'presupuesto', 'ejecutado',
-                'fecha_ini', 'fecha_fin'
+                'id', 'nombre', 'presupuesto', 'objetivo_proyectado',
+                'ejecutado', 'fecha_ini', 'fecha_fin'
             ],
             include: [
                 {
@@ -48,20 +49,26 @@ const getLowPerformance = async () => {
                         }
                     ]
                 }
-            ]
+            ],
+            order: [['fecha_fin', 'ASC']]
         });
 
         if (!reportes.length) {
-            return { campaigns: [], message: 'No hay campañas activas en este momento' };
+            return {
+                total: 0,
+                campaigns: [],
+                message: currentUser.role.rol === 'admin'
+                    ? 'No hay campañas activas en el sistema en este momento'
+                    : 'No tienes campañas activas asignadas en este momento'
+            };
         }
 
-        // Para cada reporte traer el total acumulado de reporte_dia
-        const results = await Promise.all(reportes.map(async (reporte) => {
+        // ── Calcular métricas por campaña ──
+        const campaigns = await Promise.all(reportes.map(async (reporte) => {
             const sumResult = await md.reporte_dia.findOne({
                 where: {
                     id_reporte: reporte.id,
                     id_objetivo: reporte.objetivo?.id,
-                    // Excluir día actual (siempre es 0)
                     [Op.not]: {
                         dia: today.getDate(),
                         mes: today.getMonth() + 1,
@@ -89,6 +96,7 @@ const getLowPerformance = async () => {
                 ? parseFloat((current / goal * 100).toFixed(1))
                 : 0;
             const gap = kpiProgress - timeProgress;
+            const status = gap >= 0 ? 'on_track' : gap >= -10 ? 'at_risk' : 'behind';
 
             return {
                 campaign_id: reporte.id,
@@ -100,33 +108,59 @@ const getLowPerformance = async () => {
                     current,
                     kpi_progress: kpiProgress,
                     time_progress: timeProgress,
-                    gap            // negativo = va mal, positivo = va bien
+                    gap,
+                    status
                 },
-                days_remaining: daysRemaining,
                 budget: {
                     total: parseFloat(reporte.presupuesto) || 0,
                     executed: parseFloat(reporte.ejecutado) || 0
                 },
-                link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+                status: daysRemaining <= 1 ? 'vence hoy' : `vence en ${daysRemaining} días`,
+                link_to_report: `https://smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
             };
         }));
 
-        // Filtrar solo las que van mal: KPI más de 10% por debajo del tiempo
-        const lowPerformance = results
-            .filter(r => r.kpi.gap < -10)
-            .sort((a, b) => a.kpi.gap - b.kpi.gap); // peores primero
+        // ── Totales generales ──
+        const totalBudget = campaigns.reduce((s, c) => s + c.budget.total, 0);
+        const totalExecuted = campaigns.reduce((s, c) => s + c.budget.executed, 0);
+        const totalGoal = campaigns.reduce((s, c) => s + c.kpi.goal, 0);
+        const totalCurrent = campaigns.reduce((s, c) => s + c.kpi.current, 0);
+
+        const onTrack = campaigns.filter(c => c.kpi.status === 'on_track').length;
+        const atRisk = campaigns.filter(c => c.kpi.status === 'at_risk').length;
+        const behind = campaigns.filter(c => c.kpi.status === 'behind').length;
 
         return {
-            total_active_campaigns: reportes.length,
-            total_low_performance: lowPerformance.length,
-            threshold_used: 'KPI más de 10% por debajo del tiempo transcurrido',
-            campaigns: lowPerformance
+            context: currentUser.role.rol === 'admin'
+                ? 'Todas las campañas activas del sistema'
+                : `Campañas asignadas a ${currentUser.nombre}`,
+            summary: {
+                total_campaigns: campaigns.length,
+                on_track: onTrack,
+                at_risk: atRisk,
+                behind: behind,
+                budget: {
+                    total: parseFloat(totalBudget.toFixed(2)),
+                    executed: parseFloat(totalExecuted.toFixed(2)),
+                    progress_percent: totalBudget > 0
+                        ? parseFloat((totalExecuted / totalBudget * 100).toFixed(1))
+                        : 0
+                },
+                kpi: {
+                    total_goal: totalGoal,
+                    total_current: totalCurrent,
+                    progress_percent: totalGoal > 0
+                        ? parseFloat((totalCurrent / totalGoal * 100).toFixed(1))
+                        : 0
+                }
+            },
+            campaigns
         };
 
     } catch (error) {
-        console.error('Error in getLowPerformance:', error);
-        throw new Error('Error fetching low performance campaigns: ' + error.message);
+        console.error('Error in getMyCampaigns:', error);
+        throw new Error('Error fetching my campaigns: ' + error.message);
     }
 };
 
-module.exports = getLowPerformance;
+module.exports = getMyCampaigns;

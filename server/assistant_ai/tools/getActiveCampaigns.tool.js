@@ -1,17 +1,19 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const { getUserFilter } = require('../helps/helps');
 
-const getActiveCampaigns = async ({ company_id }) => {
+const getActiveCampaigns = async ({ company_id, include_inactive = false, currentUser }) => {
     try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const reportes = await md.reportes.findAll({
             where: {
-                activo: true,
+                ...(include_inactive ? {} : { activo: true }),
                 seguimiento_activo: true,
                 fecha_ini: { [Op.lte]: today },
-                fecha_fin: { [Op.gte]: today }
+                fecha_fin: { [Op.gte]: today },
+                ...getUserFilter(currentUser)
             },
             attributes: [
                 'id', 'nombre', 'presupuesto',

@@ -1,14 +1,15 @@
-const extractEntities = require('./services/entityExtractor.service');
-const getCatalog = require('./services/catalogSearch.service');
+const extractEntities = require('../services/entityExtractor.service');
+const getCatalog = require('../services/catalogSearch.service');
 const { generateClarification,
-    generateNotFound } = require('./services/clarification.service');
-const generateResponse = require('./services/responder.service');
-const executeTool = require('./tools/executor');
-const { getNeeds, getTool, getNeutralQuestion } = require('./config/intents');
+    generateNotFound } = require('../services/clarification.service');
+const generateResponse = require('../services/responder.service');
+const executeTool = require('../tools/executor');
+const { getNeeds, getTool, getNeutralQuestion } = require('../config/intents');
 
 async function handleChat(req, res) {
     try {
-        const { question, selection_id, selection_type } = req.body;
+        const { question, selection_id } = req.body;
+        const currentUser = req.user;
 
         if (!question?.trim()) {
             return res.status(400).json({ error: 'Question is required' });
@@ -21,15 +22,23 @@ async function handleChat(req, res) {
 
         // ── 2. Employee already selected from a list ──
         if (selection_id) {
-            const data = await executeTool([{ tool, params: { campaign_id: selection_id } }]);
-            const neutralQuestion = getNeutralQuestion(entities.intent);
+            const resolvedIntent = entities.intent === 'unknown'
+                ? 'campaign_status'
+                : entities.intent;
+            const resolvedTool = getTool(resolvedIntent);
+            const neutralQuestion = getNeutralQuestion(resolvedIntent) || 'Dame el estado de esta campaña';
+            const data = await executeTool([{ tool: resolvedTool, params: { campaign_id: selection_id, include_inactive: true, currentUser } }]);
             const response = await generateResponse(neutralQuestion, data, true);
             return res.json({ type: 'response', message: response });
         }
 
+        console.log('ENTITIES:', entities);
+        console.log('INTENT:', entities.intent);
+        console.log('TOOL:', tool);
+
         // ── 3. No context needed → go directly to tool ──
         if (needs.length === 0) {
-            const data = await executeTool([{ tool, params: { entities, days_ahead: entities.days_ahead ?? 7 } }]);
+            const data = await executeTool([{ tool, params: { entities, days_ahead: entities.days_ahead ?? 7, currentUser } }]);
             const response = await generateResponse(question, data);
             return res.status(200).json({ type: 'response', message: response });
         }
@@ -61,6 +70,7 @@ async function handleChat(req, res) {
             params: {
                 campaign_id: catalog.campaigns[0]?.id,
                 company_id: catalog.company?.id,
+                include_inactive: catalog.include_inactive || false,
                 entities
             }
         }]);

@@ -2,8 +2,8 @@ const INTENTS = {
     campaign_status: {
         needs: ['company', 'campaign'],
         tool: 'get_campaign_status',
-        description: 'Estado general de una campaña: presupuesto, KPIs, avance, CTR, fechas. Palabras clave: estado, cómo va, resumen, avance, rendimiento',
-        keywords: 'cómo va, estado, resumen, avance, rendimiento',
+        description: 'Estado general de una campaña: presupuesto, KPIs, avance, CTR, fechas.',
+        keywords: 'cómo va, estado, resumen, avance, rendimiento, dame los datos, información sobre',
         neutral_question: 'Dame el estado de esta campaña'
     },
     daily_data: {
@@ -65,9 +65,30 @@ const INTENTS = {
     unknown: {
         needs: [],
         tool: 'handle_unknown',
-        description: 'Intent no reconocido o pregunta que no encaja en las otras categorías',
-        keywords: '',
-        neutral_question: 'No entiendo tu pregunta, ¿puedes reformularla?'
+        description: 'SOLO usar cuando la pregunta es completamente ajena al marketing: clima, geografía, cocina, deportes, política.',
+        keywords: 'clima, temperatura, capital, país, receta, partido, elecciones',
+        neutral_question: null
+    },
+    my_campaigns_status: {
+        needs: [],
+        tool: 'get_my_campaigns',
+        description: 'Resumen de todas las campañas asignadas al usuario actual.',
+        keywords: 'mis campañas, mis reportes, lo que tengo asignado, mis cuentas',
+        neutral_question: 'Dame el resumen de mis campañas'
+    },
+    my_low_performance: {
+        needs: [],
+        tool: 'get_low_performance',
+        description: 'Campañas asignadas al usuario actual que están por debajo de su KPI.',
+        keywords: 'mis campañas que van mal, mis campañas con problemas, mis campañas bajo rendimiento',
+        neutral_question: 'Dame mis campañas con bajo rendimiento'
+    },
+    my_expiring_campaigns: {
+        needs: [],
+        tool: 'get_expiring_campaigns',
+        description: 'Campañas asignadas al usuario actual que vencen pronto.',
+        keywords: 'mis campañas que vencen, mis campañas por vencer, qué me vence',
+        neutral_question: '¿Qué campañas mías vencen pronto?'
     }
 };
 

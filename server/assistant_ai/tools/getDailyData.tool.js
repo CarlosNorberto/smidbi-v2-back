@@ -1,5 +1,6 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const { getUserFilter } = require('../helps/helps');
 
 /**
  * Obtiene los datos diarios de una campaña específica, agrupados por objetivo.
@@ -14,14 +15,15 @@ const { Op } = require('sequelize');
  * @returns {Object} Un objeto con los datos diarios agrupados por objetivo, incluyendo total, promedio diario, mejor día y peor día para cada objetivo.
  * @throws {Error} Si no se encuentra ningún reporte activo para la campaña especificada o si ocurre un error al obtener los datos diarios.
  */
-const getDailyData = async ({ campaign_id, start_date, end_date }) => {
+const getDailyData = async ({ campaign_id, start_date, end_date, include_inactive = false, currentUser }) => {
     try {
 
         // Primero traer el reporte con su objetivo principal
         const reporte = await md.reportes.scope(['withObjectives']).findOne({
             where: {
                 id: campaign_id,
-                activo: true
+                ...(include_inactive ? {} : { activo: true }),
+                ...getUserFilter(currentUser)
             },
             include: [
                 {

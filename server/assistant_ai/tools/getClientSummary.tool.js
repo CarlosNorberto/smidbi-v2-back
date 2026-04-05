@@ -1,7 +1,8 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const { getUserFilter } = require('../helps/helps');
 
-const getClientSummary = async ({ company_id }) => {
+const getClientSummary = async ({ company_id, include_inactive = false, currentUser }) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -9,10 +10,10 @@ const getClientSummary = async ({ company_id }) => {
     // ── 1. Traer todas las campañas activas de la empresa ──
     const reportes = await md.reportes.findAll({
       where: {
-        activo: true,
-        seguimiento_activo: true,
+        ...(include_inactive ? {} : { activo: true }),        
         fecha_ini: { [Op.lte]: today },
-        fecha_fin: { [Op.gte]: today }
+        fecha_fin: { [Op.gte]: today },
+        ...getUserFilter(currentUser)
       },
       attributes: [
         'id', 'nombre', 'presupuesto', 'objetivo_proyectado',

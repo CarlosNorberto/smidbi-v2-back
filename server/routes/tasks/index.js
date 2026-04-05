@@ -14,6 +14,7 @@ module.exports=(app)=>{
     app.get(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.getById);
     app.post(process.env.PREFIX_API + '/tasks_cards/save', sessionAuth, tasksCards.save);
     app.put(process.env.PREFIX_API + '/tasks_cards/update/:id', sessionAuth, tasksCards.update);
+    app.delete(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.remove);
 
     // TASKS TAGS
     app.get(process.env.PREFIX_API + '/tasks_tags/all', sessionAuth, tasksTags.getAll);

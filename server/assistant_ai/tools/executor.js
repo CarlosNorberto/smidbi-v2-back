@@ -7,6 +7,7 @@ const getLowPerformance = require('./getLowPerformance.tool');
 const getExpiringCampaigns = require('./getExpiringCampaigns.tool');
 const generateCampaignReport = require('./generateCampaignReport.tool');
 const getGlobalBudget = require('./getGlobalBudget.tools');
+const getMyCampaigns = require('./getMyCampaigns.tool');
 const handleUnknown = require('./handleUnknown.tool');
 
 // Mapa de nombre → función
@@ -20,6 +21,7 @@ const toolMap = {
     get_expiring_campaigns:     getExpiringCampaigns,       //Implementado    
     generate_campaign_report:   getCampaignStatus,          //Se reutiliza getCampaignStatus para este    
     get_global_budget:          getGlobalBudget,            //No Implementado
+    get_my_campaigns:           getMyCampaigns,             //Implementado
     handle_unknown:             handleUnknown
 };
 

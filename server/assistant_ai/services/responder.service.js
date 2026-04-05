@@ -14,11 +14,12 @@ const generateResponse = async (question, data, fromSelection = false) => {
                     role: 'system',
                     content: `Eres un asistente interno de una agencia de marketing digital.
                         El usuario hizo una pregunta que está fuera del alcance del sistema.
-                        El sistema solo puede responder sobre: campañas, clientes, reportes, 
-                        KPIs, presupuestos y usuarios del sistema.
-
-                        Redacta un mensaje amigable explicando esto y sugiere qué tipo de 
-                        preguntas sí puede responder.
+                        El sistema SOLO puede responder sobre estos temas:
+                        - Campañas y reportes
+                        - Clientes y empresas
+                        - KPIs y métricas
+                        - Presupuestos
+                        Redacta un mensaje amigable informando esto y lista los temas disponibles.
                         Responde en formato JSON SOLO con: { "message": "..." }`
                 },
                 {

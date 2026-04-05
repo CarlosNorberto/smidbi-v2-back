@@ -196,8 +196,23 @@ const update = async (req, res) => {
     }
 };
 
+const remove = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const card = await md.tasks_cards.findByPk(id);
+        if (!card) {
+            return res.status(404).json({ message: 'No se encontró la tarjeta' });
+        }
+        await card.destroy();
+        return res.status(200).json({ message: 'Tarjeta eliminada correctamente' });
+    } catch (error) {
+        return res.status(500).json({ message: 'Error al eliminar la tarjeta' });
+    }
+};
+
 module.exports = {
     getById,
     save,
     update,
+    remove,
 };

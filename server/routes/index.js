@@ -9,7 +9,6 @@ const objetivos = require('../controllers/objetivos');
 const segmentaciones = require('../controllers/segmentacion');
 const seguimiento = require('../controllers/seguimiento');
 const utilities = require('../controllers/utilities');
-const chat = require('../chat/chat.controller');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
@@ -112,9 +111,6 @@ module.exports = (app) => {
     // UTILIDADES
     app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
     app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
-
-    // CHATBOT
-    app.post(process.env.PREFIX_API + '/chat_ia/question', sessionAuth, chat.handleChat);
 
     // GESTOR DE PROSPECTOS - LEAD MANAGER
 
