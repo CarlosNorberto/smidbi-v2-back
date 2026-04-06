@@ -8,7 +8,8 @@ const tasksActivities = require('../../controllers/tasks/tasks_activities');
 module.exports=(app)=>{
     
     // TASKS LISTS
-    app.get(process.env.PREFIX_API + '/tasks_lists/report/all/:reportId', sessionAuth, tasksLists.getAllByReportId);
+    app.get(process.env.PREFIX_API + '/tasks_lists/report/all', sessionAuth, tasksLists.getAll);
+    app.get(process.env.PREFIX_API + '/tasks_lists/report/all/:reportId', sessionAuth, tasksLists.getAll);
 
     // TASKS CARDS
     app.get(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.getById);

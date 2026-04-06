@@ -1,20 +1,45 @@
 const md = require('../../models');
+const { Op } = require('sequelize');
 const { getExpirationStatus } = require('../../helps');
 
-const getAllByReportId = async (req, res,) => {
+const getAll = async (req, res,) => {
     try {
         const reportId = req.params.reportId;
+        let whereCards = {};
+        let whereResponsibles = {};
+        let responsiblesRequired = false;
+        if (reportId) {
+            whereCards.report_id = reportId;
+        }else{
+            whereResponsibles.id = req.user.id;            
+            responsiblesRequired = true;
+            const daysToKeepCompleted = 7; // Mostrar completadas de últimos 7 días
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeepCompleted);
+            
+            whereCards[Op.or] = [
+                // Tareas no completadas
+                { completed: false },
+                // Tareas completadas recientemente
+                {
+                    completed: true,
+                    date_completed: { [Op.gte]: cutoffDate }
+                }
+            ];
+        }
         const tasksLists = await md.tasks_lists.findAll({
             include: [
                 {
                     model: md.tasks_cards,
                     as: 'cards',
-                    where: { report_id: reportId },
+                    where: whereCards,
                     required: false,
                     include: [
                         {
                             model: md.usuarios,
                             as: 'responsibles',
+                            where: whereResponsibles,
+                            required: responsiblesRequired,
                             through: { attributes: [] },
                             attributes: ['id', 'nombre', 'email', 'time_zone'],
                         },
@@ -48,5 +73,5 @@ const getAllByReportId = async (req, res,) => {
 };
 
 module.exports = {
-    getAllByReportId,
+    getAll,
 };
