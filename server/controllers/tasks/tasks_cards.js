@@ -92,9 +92,19 @@ const save = async (req, res) => {
     try {
         let body = req.body;
         body.user_id = req.user.id;
+        // set exp_date_year, exp_date_month, exp_date_day, exp_time_hour, exp_time_minute to neext day every time create a card
+        const nextDay = new Date();
+        nextDay.setDate(nextDay.getDate() + 1);
+        body.exp_date_year = nextDay.getFullYear();
+        body.exp_date_month = nextDay.getMonth() + 1;
+        body.exp_date_day = nextDay.getDate();
+        body.exp_time_hour = 23;
+        body.exp_time_minute = 59;
+        
         const newCard = await md.tasks_cards.create(body);
         res.status(201).json(newCard);
     } catch (error) {
+        console.log(error);
         res.status(500).json({ message: 'Error al crear la tarjeta' });
     }
 };

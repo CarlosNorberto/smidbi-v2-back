@@ -11,8 +11,10 @@ const getAll = async (req, res,) => {
         if (reportId) {
             whereCards.report_id = reportId;
         }else{
-            whereResponsibles.id = req.user.id;            
-            responsiblesRequired = true;
+            if(req.user.role.rol !== 'admin') {
+                whereResponsibles.id = req.user.id;            
+                responsiblesRequired = true;
+            }
             const daysToKeepCompleted = 7; // Mostrar completadas de últimos 7 días
             const cutoffDate = new Date();
             cutoffDate.setDate(cutoffDate.getDate() - daysToKeepCompleted);

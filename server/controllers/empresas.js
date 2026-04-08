@@ -50,7 +50,9 @@ const getAllByUsers = async (req, res) => {
             activo: active
         }
         if (company_id) {
-            where.id = company_id;            
+            where.id = company_id;
+            delete where.activo;
+            delete where.id_usuario;
         }
         if (name) {
             where.nombre = {

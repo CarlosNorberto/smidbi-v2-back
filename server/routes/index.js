@@ -100,6 +100,8 @@ module.exports = (app) => {
 
     // OBJETIVOS
     app.get(process.env.PREFIX_API + '/objectives/all', sessionAuth, objetivos.getAll);
+    app.post(process.env.PREFIX_API + '/objectives/create', sessionAuth, objetivos.create);
+    app.put(process.env.PREFIX_API + '/objectives/update/:id', sessionAuth, objetivos.update);
 
     // SEGMENTACION
     app.get(process.env.PREFIX_API + '/segmentations/all/:report_id', sessionAuth, segmentaciones.getAllByReportId);

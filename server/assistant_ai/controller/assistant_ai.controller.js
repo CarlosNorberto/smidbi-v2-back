@@ -44,7 +44,7 @@ async function handleChat(req, res) {
         }
 
         // ── 4. Search context in DB ──
-        const catalog = await getCatalog(entities, needs);
+        const catalog = await getCatalog(entities, needs, currentUser);
 
         if (catalog.ambiguous) {
             const message = await generateClarification({
@@ -71,7 +71,9 @@ async function handleChat(req, res) {
                 campaign_id: catalog.campaigns[0]?.id,
                 company_id: catalog.company?.id,
                 include_inactive: catalog.include_inactive || false,
-                entities
+                entities,
+                days_ahead: entities.days_ahead ?? 7,
+                currentUser
             }
         }]);
 

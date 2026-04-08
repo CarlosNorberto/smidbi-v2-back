@@ -105,7 +105,7 @@ const companySearch = async (req, res) => {
         }
         const empresas = await md.empresas.findAll({
             where: where,
-            attributes: ['id', 'nombre'],
+            attributes: ['id', 'nombre', 'activo'],
             limit: 10,
             order: [['nombre', 'ASC']]
         });
