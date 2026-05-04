@@ -9,3 +9,6 @@ uploads/ads/*
 
 # Archivos de entorno
 .env
+
+# Ecosistema de PM2
+ecosystem.config.js
