@@ -32,10 +32,6 @@ const loadTracking = async (req, res) => {
                 };
         }
 
-        // amount by day
-        // const amount_by_day = md.Sequelize.literal(`(
-
-
         const reports = await md.reportes.findAndCountAll({
             where: general_where,
             attributes: {
