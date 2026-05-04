@@ -118,9 +118,27 @@ const update = async (req, res) => {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
 
-        const { list_id, order, responsibles, tags } = req.body;
+        const { list_id, order, responsibles, tags, description, name } = req.body;
 
         const isCompleted = parseInt(list_id) === 3;
+
+        if(name && name !== card.name){
+            await md.tasks_activities.create({
+                card_id: id,
+                date_activity: new Date(),
+                activity_detail: `Se cambió el nombre de '${card.name}' a '${name}'`,
+                responsible_id: req.user.id,
+            });
+        }
+
+        if(description && description !== card.description){
+            await md.tasks_activities.create({
+                card_id: id,
+                date_activity: new Date(),
+                activity_detail: `Se cambió la descripción de '${card.description}' a '${description}'`,
+                responsible_id: req.user.id,
+            });
+        }
 
         const updateData = {
             ...req.body,
