@@ -74,7 +74,16 @@ module.exports = (sequelize, DataTypes) => {
                 {
                     model: models.company_form,
                     as: 'company_form',                    
-                    attributes: ['id', 'company_name'],
+                    attributes: ['id', 'company_name', 'packs_pauta', 'traffickers', 'consulting', 'addendum', 'fee_mensual', 'fee_variable', 'fee_mixto', 'analitica', 'seo',]
+                }
+            ]
+        });
+
+        Contracts.addScope('withCompanyFormComplete', {
+            include: [
+                {
+                    model: models.company_form,
+                    as: 'company_form',
                 }
             ]
         });

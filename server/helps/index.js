@@ -1,5 +1,6 @@
 const fs = require('fs');
 const md = require('../models');
+const { format, parseISO } = require('date-fns');
 
 const getUploadUrl = (req, folder, filename) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
@@ -43,10 +44,40 @@ const getExpirationStatus = (card) => {
     return '';
 };
 
+/**
+ * Genera el código de contrato
+ * @param {Date} applicationDate - Fecha de aplicación
+ * @param {number} contractId - ID del contrato
+ * @returns {string} Código de contrato
+ */
+const generateContractCode = (applicationDate, contractId) => {
+    const applicationYear = applicationDate
+        ? applicationDate.split('-')[0]
+        : null;
+
+    return `ADM-CTR-${applicationYear}-${contractId}`;
+};
+
+/**
+ * Convierte una cadena de fecha a un objeto Date
+ * @param {string} dateString - Cadena de fecha
+ * @returns {Date} Fecha
+ */
+const parseToDate = (dateString) => {
+    if (!dateString) return null;
+    
+    // ambos formatos los maneja parseISO
+    // '2026-06-24' → '2026-06-24'
+    // '2026-02-01T04:00:00.000Z' → '2026-02-01'
+    return format(parseISO(dateString), 'yyyy-MM-dd');
+};
+
 module.exports = {
     getUploadUrl,
     getUploadPath,
     convertImageToBase64,
     getObjetivoLogrado,
     getExpirationStatus,
+    generateContractCode,
+    parseToDate
 };

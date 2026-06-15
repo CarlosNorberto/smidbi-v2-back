@@ -38,6 +38,7 @@ module.exports = (sequelize, DataTypes) => {
         duration_consulting: { type: DataTypes.STRING, allowNull: true },
         scope_of_service_consulting: { type: DataTypes.TEXT, allowNull: true },
         start_date_consulting: { type: DataTypes.STRING, allowNull: true },
+        end_date_consulting: { type: DataTypes.STRING, allowNull: true },
 
         // Analítica
         analitica: { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },

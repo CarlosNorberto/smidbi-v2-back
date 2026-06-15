@@ -12,3 +12,6 @@ uploads/ads/*
 
 # Ecosistema de PM2
 ecosystem.config.js
+
+# google credentials
+server/controllers/contract_manager/google-credentials.json
