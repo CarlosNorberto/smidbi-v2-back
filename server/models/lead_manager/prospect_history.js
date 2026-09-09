@@ -76,7 +76,7 @@ module.exports = (sequelize, DataTypes) => {
     ProspectHistory.associate = (models) => {
         ProspectHistory.belongsTo(models.stages, { foreignKey: 'stage_id', onDelete: 'CASCADE', as:'stage' });
         ProspectHistory.belongsTo(models.prospects, { foreignKey: 'prospect_id', onDelete: 'CASCADE', as:'prospect' });
-        ProspectHistory.belongsTo(models.usuarios, { foreignKey: 'responsible_id', onDelete: 'SET NULL', as:'responsible' });
+        ProspectHistory.belongsTo(models.responsibles, { foreignKey: 'responsible_id', onDelete: 'SET NULL', as:'responsible' });
         ProspectHistory.belongsTo(models.status, { foreignKey: 'status_id', onDelete: 'SET NULL', as:'status' });
         ProspectHistory.belongsTo(models.status, { foreignKey: 'meeting_status_id', onDelete: 'SET NULL', as:'meeting_status' });
         ProspectHistory.belongsTo(models.status, { foreignKey: 'final_state_id', onDelete: 'SET NULL', as:'final_state' });

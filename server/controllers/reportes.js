@@ -1,7 +1,14 @@
 const md = require('../models');
+const { Op } = require('sequelize');
 const { DateTime } = require('luxon');
 const { isBefore, addDays, parse } = require('date-fns');
-const { getUploadUrl, getUploadPath } = require('../helps');
+const {
+    getUploadUrl,
+    getUploadPath,
+    getObjetivoLogrado,
+    percentDias,
+    getProgresoPresupuesto,
+} = require('../helps');
 const fs = require('fs');
 const cloudinary = require('cloudinary').v2;
 
@@ -16,14 +23,18 @@ const getById = async (req, res) => {
             where: {
                 id: id,
             },
-            attributes: attributes ? attributes : ['id', 'nombre', 'descripcion']
+            attributes: attributes
+                ? attributes
+                : ['id', 'nombre', 'descripcion'],
         });
         if (!reporte) {
             return res.status(404).json({ message: 'Reporte no encontrado' });
         }
         res.status(200).json(reporte);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener el reporte: ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener el reporte: ${error.message}`,
+        });
     }
 };
 
@@ -33,25 +44,35 @@ const getAllByCampaign = async (req, res) => {
         const { page = 1, limit = 10, name = null } = req.query;
         const offset = (page - 1) * limit;
         let where = {
-            id_campana: campaign_id
+            id_campana: campaign_id,
         };
         if (name) {
             where.nombre = {
-                [md.Sequelize.Op.iLike]: `%${name}%`
+                [md.Sequelize.Op.iLike]: `%${name}%`,
             };
         }
-        const reportes = await md.reportes.scope(['withCampaign', 'withPlatform']).findAndCountAll({
-            where: where,
-            attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            },
-            order: [['id', 'DESC']],
-            limit,
-            offset,
-        });
+        const reportes = await md.reportes
+            .scope(['withCampaign', 'withPlatform'])
+            .findAndCountAll({
+                where: where,
+                attributes: {
+                    exclude: [
+                        'usuario_creacion',
+                        'usuario_modificacion',
+                        'usuario_eliminacion',
+                        'fecha_modificacion',
+                        'fecha_eliminacion',
+                    ],
+                },
+                order: [['id', 'DESC']],
+                limit,
+                offset,
+            });
         res.status(200).json(reportes);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los reportes ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los reportes ${error.message}`,
+        });
     }
 };
 
@@ -61,13 +82,21 @@ const getAll = async (req, res) => {
         const offset = (page - 1) * limit;
         let where = {};
         if (req.body) {
-            const { name, own, campaign_id, category_id, company_id, year, month } = req.body;
+            const {
+                name,
+                own,
+                campaign_id,
+                category_id,
+                company_id,
+                year,
+                month,
+            } = req.body;
             if (own === true || own === 'true') {
                 where.id_usuario = req.user.id;
             }
             if (name) {
                 where.nombre = {
-                    [md.Sequelize.Op.iLike]: `%${name}%`
+                    [md.Sequelize.Op.iLike]: `%${name}%`,
                 };
             }
             if (campaign_id) {
@@ -82,40 +111,60 @@ const getAll = async (req, res) => {
             if (year && month) {
                 where.fecha_ini = {
                     [md.Sequelize.Op.and]: [
-                        md.Sequelize.where(md.Sequelize.fn('EXTRACT', md.Sequelize.literal('YEAR FROM "fecha_ini"')), year),
-                        md.Sequelize.where(md.Sequelize.fn('EXTRACT', md.Sequelize.literal('MONTH FROM "fecha_ini"')), month)
-                    ]
+                        md.Sequelize.where(
+                            md.Sequelize.fn(
+                                'EXTRACT',
+                                md.Sequelize.literal('YEAR FROM "fecha_ini"'),
+                            ),
+                            year,
+                        ),
+                        md.Sequelize.where(
+                            md.Sequelize.fn(
+                                'EXTRACT',
+                                md.Sequelize.literal('MONTH FROM "fecha_ini"'),
+                            ),
+                            month,
+                        ),
+                    ],
                 };
             }
         }
         const reportes = await md.reportes.findAndCountAll({
             where: where,
-            include: [{
-                model: md.campanas,
-                as: 'campana',
-                attributes: ['id', 'nombre', 'id_categoria'],
-                required: true,
-                include: [{
-                    model: md.categorias,
-                    as: 'categoria',
-                    attributes: ['id', 'nombre', 'id_empresa'],
+            include: [
+                {
+                    model: md.campanas,
+                    as: 'campana',
+                    attributes: ['id', 'nombre', 'id_categoria'],
                     required: true,
-                    include: [{
-                        model: md.empresas,
-                        as: 'empresa',
-                        attributes: ['id', 'nombre'],
-                        required: true,
-                    }]
-                }]
-            }],
+                    include: [
+                        {
+                            model: md.categorias,
+                            as: 'categoria',
+                            attributes: ['id', 'nombre', 'id_empresa'],
+                            required: true,
+                            include: [
+                                {
+                                    model: md.empresas,
+                                    as: 'empresa',
+                                    attributes: ['id', 'nombre'],
+                                    required: true,
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
             limit,
             offset,
         });
         res.status(200).json(reportes);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los reportes ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los reportes ${error.message}`,
+        });
     }
-}
+};
 
 const saveUpdate = async (req, res) => {
     try {
@@ -128,7 +177,9 @@ const saveUpdate = async (req, res) => {
                 // Actualizar reporte existente
                 await report.update(body);
             } else {
-                return res.status(404).json({ message: 'No se encontró el reporte para actualizar' });
+                return res.status(404).json({
+                    message: 'No se encontró el reporte para actualizar',
+                });
             }
         } else {
             if (body.fecha_ini) {
@@ -144,14 +195,31 @@ const saveUpdate = async (req, res) => {
             body.usuario_creacion = req.user.id;
             report = await md.reportes.create(body);
         }
-        await createDaysForReport(report.id, body.id_objetivo, body.fecha_ini, body.fecha_fin, req.user.id);
-        res.status(200).json({ message: 'Reporte guardado correctamente', data: report });
+        await createDaysForReport(
+            report.id,
+            body.id_objetivo,
+            body.fecha_ini,
+            body.fecha_fin,
+            req.user.id,
+        );
+        res.status(200).json({
+            message: 'Reporte guardado correctamente',
+            data: report,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar el reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al guardar el reporte ${error.message}`,
+        });
     }
 };
 
-const createDaysForReport = async (reportId, objetivoId, dateInit, dateEnd, user_id) => {
+const createDaysForReport = async (
+    reportId,
+    objetivoId,
+    dateInit,
+    dateEnd,
+    user_id,
+) => {
     try {
         dateInit = new Date(dateInit);
         dateEnd = new Date(dateEnd);
@@ -161,7 +229,7 @@ const createDaysForReport = async (reportId, objetivoId, dateInit, dateEnd, user
             where: {
                 id_reporte: reportId,
                 id_objetivo: objetivoId,
-            }
+            },
         });
         while (isBefore(current, addDays(dateEnd, 1))) {
             const dia = current.getDate();
@@ -175,8 +243,8 @@ const createDaysForReport = async (reportId, objetivoId, dateInit, dateEnd, user
                     dia: dia,
                     mes: mes,
                     anio: anio,
-                    usuario_modificacion: user_id
-                }
+                    usuario_modificacion: user_id,
+                },
             });
             if (!existingDay) {
                 // Crear nuevo día
@@ -187,14 +255,16 @@ const createDaysForReport = async (reportId, objetivoId, dateInit, dateEnd, user
                     mes: mes,
                     anio: anio,
                     valor: 0,
-                    usuario_creacion: user_id
+                    usuario_creacion: user_id,
                 });
             }
             // Avanzar al siguiente día
             current = addDays(current, 1);
         }
     } catch (error) {
-        console.error(`Error al crear/actualizar días para el reporte ${reportId}: ${error.message}`);
+        console.error(
+            `Error al crear/actualizar días para el reporte ${reportId}: ${error.message}`,
+        );
     }
 };
 
@@ -203,13 +273,20 @@ const enableDisableReport = async (req, res) => {
         const { id } = req.params;
         const report = await md.reportes.findByPk(id);
         if (!report) {
-            return res.status(404).json({ message: 'No se encontró el reporte' });
+            return res
+                .status(404)
+                .json({ message: 'No se encontró el reporte' });
         }
         report.activo = !report.activo;
         await report.save();
-        res.status(200).json({ message: 'Reporte actualizado correctamente', data: report });
+        res.status(200).json({
+            message: 'Reporte actualizado correctamente',
+            data: report,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al actualizar el reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al actualizar el reporte ${error.message}`,
+        });
     }
 };
 
@@ -218,12 +295,16 @@ const deleteReport = async (req, res) => {
         const { id } = req.params;
         const report = await md.reportes.findByPk(id);
         if (!report) {
-            return res.status(404).json({ message: 'No se encontró el reporte para eliminar' });
+            return res
+                .status(404)
+                .json({ message: 'No se encontró el reporte para eliminar' });
         }
         await report.destroy();
         res.status(200).json({ message: 'Reporte eliminado correctamente' });
     } catch (error) {
-        res.status(500).json({ message: `Error al eliminar el reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al eliminar el reporte ${error.message}`,
+        });
     }
 };
 
@@ -232,14 +313,17 @@ const deleteReport = async (req, res) => {
 const getSecondaryObjectivesByReportId = async (req, res) => {
     try {
         const { report_id } = req.params;
-        const objetivos_secundarios = await md.reporte_objetivos_secundarios.findAll({
-            where: {
-                id_reporte: report_id
-            }
-        });
+        const objetivos_secundarios =
+            await md.reporte_objetivos_secundarios.findAll({
+                where: {
+                    id_reporte: report_id,
+                },
+            });
         res.status(200).json(objetivos_secundarios);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los objetivos secundarios ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los objetivos secundarios ${error.message}`,
+        });
     }
 };
 
@@ -250,7 +334,7 @@ const saveUpdateSecondaryObjectives = async (req, res) => {
 
         // Eliminar objetivos secundarios existentes
         await md.reporte_objetivos_secundarios.destroy({
-            where: { id_reporte: report_id }
+            where: { id_reporte: report_id },
         });
 
         // Agregar nuevos objetivos secundarios
@@ -258,13 +342,17 @@ const saveUpdateSecondaryObjectives = async (req, res) => {
             await md.reporte_objetivos_secundarios.create({
                 id_reporte: report_id,
                 id_objetivo: objetivo.id_objetivo,
-                valor: objetivo.valor
+                valor: objetivo.valor,
             });
         }
 
-        res.status(200).json({ message: "Objetivos secundarios actualizados correctamente." });
+        res.status(200).json({
+            message: 'Objetivos secundarios actualizados correctamente.',
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al actualizar los objetivos secundarios ${error.message}` });
+        res.status(500).json({
+            message: `Error al actualizar los objetivos secundarios ${error.message}`,
+        });
     }
 };
 
@@ -274,31 +362,45 @@ const getDaysByReportId = async (req, res) => {
     try {
         const { report_id } = req.params;
         const report = await md.reportes.findByPk(report_id, {
-            attributes: ['id', 'id_objetivo']
+            attributes: ['id', 'id_objetivo'],
         });
         if (!report) {
-            return res.status(404).json({ message: 'No se encontró el reporte' });
+            return res
+                .status(404)
+                .json({ message: 'No se encontró el reporte' });
         }
         const reporte_dias = await md.reporte_dia.findAll({
             where: {
                 id_reporte: report_id,
-                id_objetivo: report.id_objetivo
+                id_objetivo: report.id_objetivo,
             },
-            order: [['anio', 'ASC'], ['mes', 'ASC'], ['dia', 'ASC']],
+            order: [
+                ['anio', 'ASC'],
+                ['mes', 'ASC'],
+                ['dia', 'ASC'],
+            ],
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            }
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
+            },
         });
         res.status(200).json(reporte_dias);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los días del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los días del reporte ${error.message}`,
+        });
     }
 };
 
 /**
  * Actualiza múltiples días en reporte_dia para un reporte y objetivo específicos.
- * @param {Request} req 
- * @param {Response} res 
+ * @param {Request} req
+ * @param {Response} res
  * @return {Promise<void>}
  */
 const updateAllDaysByReportAndObjetivo = async (req, res) => {
@@ -307,51 +409,69 @@ const updateAllDaysByReportAndObjetivo = async (req, res) => {
         const { days } = req.body;
 
         const report = await md.reportes.findByPk(report_id, {
-            attributes: ['id', 'id_objetivo']
+            attributes: ['id', 'id_objetivo'],
         });
         if (!report) {
-            return res.status(404).json({ message: 'No se encontró el reporte' });
+            return res
+                .status(404)
+                .json({ message: 'No se encontró el reporte' });
         }
         for (const day of days) {
-            await md.reporte_dia.update({ valor: day.valor }, {
-                where: {
-                    id_reporte: report_id,
-                    id_objetivo: report.id_objetivo,
-                    dia: day.dia,
-                    mes: day.mes,
-                    anio: day.anio
-                }
-            });
+            await md.reporte_dia.update(
+                { valor: day.valor },
+                {
+                    where: {
+                        id_reporte: report_id,
+                        id_objetivo: report.id_objetivo,
+                        dia: day.dia,
+                        mes: day.mes,
+                        anio: day.anio,
+                    },
+                },
+            );
         }
-        res.status(200).send({ message: "Valores actualizados correctamente en reporte_dia." });
+        res.status(200).send({
+            message: 'Valores actualizados correctamente en reporte_dia.',
+        });
     } catch (error) {
-        res.status(500).send({ message: "Ocurrió un error al guardar el valor en reporte_dia. " + error });
+        res.status(500).send({
+            message:
+                'Ocurrió un error al guardar el valor en reporte_dia. ' + error,
+        });
     }
-}
+};
 
 const updateReporteDia = async (req, res) => {
     try {
         const { id, valor, id_reporte } = req.body;
-        await md.reporte_dia.update({
-            valor: valor
-        }, {
-            where: {
-                id: id
-            }
-        });
+        await md.reporte_dia.update(
+            {
+                valor: valor,
+            },
+            {
+                where: {
+                    id: id,
+                },
+            },
+        );
         const reporte = await md.reportes.findByPk(id_reporte);
         // const total_valor = await updateKPI(reporte);
-        res.status(200).send({ message: "Valor actualizado correctamente en reporte_dia." });
+        res.status(200).send({
+            message: 'Valor actualizado correctamente en reporte_dia.',
+        });
     } catch (error) {
-        res.status(500).send({ message: "Ocurrió un error al guardar el valor en reporte_dia. " + error });
+        res.status(500).send({
+            message:
+                'Ocurrió un error al guardar el valor en reporte_dia. ' + error,
+        });
     }
-}
+};
 
 // ************** REPORT GENRES
 
 /**
  * Obtiene los géneros por ID de reporte.
- * @param {*} req - Request con parámetro report_id 
+ * @param {*} req - Request con parámetro report_id
  * @param {*} res - Response con los datos del género del reporte
  * @return {Promise<void>}
  */
@@ -360,12 +480,14 @@ const getGenderByReportId = async (req, res) => {
         const { report_id } = req.params;
         const reporte_genero = await md.interaccion_genero.findOne({
             where: {
-                id_reporte: parseInt(report_id)
-            }
+                id_reporte: parseInt(report_id),
+            },
         });
         res.status(200).json(reporte_genero);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener el género del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener el género del reporte ${error.message}`,
+        });
     }
 };
 
@@ -375,8 +497,8 @@ const saveUpdateGender = async (req, res) => {
         const { report_id } = req.params;
         let reporte_genero = await md.interaccion_genero.findOne({
             where: {
-                id_reporte: parseInt(report_id)
-            }
+                id_reporte: parseInt(report_id),
+            },
         });
         if (reporte_genero) {
             await reporte_genero.update(body);
@@ -385,9 +507,14 @@ const saveUpdateGender = async (req, res) => {
             body.usuario_creacion = req.user.id;
             reporte_genero = await md.interaccion_genero.create(body);
         }
-        res.status(200).json({ message: "Género guardado correctamente.", data: reporte_genero });
+        res.status(200).json({
+            message: 'Género guardado correctamente.',
+            data: reporte_genero,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar/actualizar el género del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al guardar/actualizar el género del reporte ${error.message}`,
+        });
     }
 };
 
@@ -404,15 +531,23 @@ const getDevicesByReportId = async (req, res) => {
         const { report_id } = req.params;
         const reporte_dispositivos = await md.interaccion_dispositivo.findOne({
             where: {
-                id_reporte: parseInt(report_id)
+                id_reporte: parseInt(report_id),
             },
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            }
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
+            },
         });
         res.status(200).json(reporte_dispositivos);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los dispositivos del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los dispositivos del reporte ${error.message}`,
+        });
     }
 };
 
@@ -422,19 +557,25 @@ const saveUpdateDevices = async (req, res) => {
         const { report_id } = req.params;
         let reporte_dispositivos = await md.interaccion_dispositivo.findOne({
             where: {
-                id_reporte: parseInt(report_id)
-            }
+                id_reporte: parseInt(report_id),
+            },
         });
         if (reporte_dispositivos) {
             await reporte_dispositivos.update(body);
         } else {
             body.id_reporte = parseInt(report_id);
             body.usuario_creacion = req.user.id;
-            reporte_dispositivos = await md.interaccion_dispositivo.create(body);
+            reporte_dispositivos =
+                await md.interaccion_dispositivo.create(body);
         }
-        res.status(200).json({ message: "Dispositivos guardados correctamente.", data: reporte_dispositivos });
+        res.status(200).json({
+            message: 'Dispositivos guardados correctamente.',
+            data: reporte_dispositivos,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar/actualizar los dispositivos del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al guardar/actualizar los dispositivos del reporte ${error.message}`,
+        });
     }
 };
 
@@ -451,15 +592,23 @@ const getHoursByReportId = async (req, res) => {
         const { report_id } = req.params;
         const reporte_horas = await md.interaccion_hora.findOne({
             where: {
-                id_reporte: parseInt(report_id)
+                id_reporte: parseInt(report_id),
             },
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            }
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
+            },
         });
         res.status(200).json(reporte_horas);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener las horas del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener las horas del reporte ${error.message}`,
+        });
     }
 };
 
@@ -474,11 +623,17 @@ const saveUpdateHours = async (req, res) => {
         const { report_id } = req.params;
         let reporte_horas = await md.interaccion_hora.findOne({
             where: {
-                id_reporte: parseInt(report_id)
+                id_reporte: parseInt(report_id),
             },
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            }
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
+            },
         });
         if (reporte_horas) {
             await reporte_horas.update(body);
@@ -487,9 +642,14 @@ const saveUpdateHours = async (req, res) => {
             body.usuario_creacion = req.user.id;
             reporte_horas = await md.interaccion_hora.create(body);
         }
-        res.status(200).json({ message: "Horas guardadas correctamente.", data: reporte_horas });
+        res.status(200).json({
+            message: 'Horas guardadas correctamente.',
+            data: reporte_horas,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar/actualizar las horas del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al guardar/actualizar las horas del reporte ${error.message}`,
+        });
     }
 };
 
@@ -511,11 +671,17 @@ const getViewAdsByReportId = async (req, res) => {
         };
         const reporte_view_ads = await md.view_ads.findAll({
             where: {
-                id_reporte: parseInt(report_id)
+                id_reporte: parseInt(report_id),
             },
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
-            }
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
+            },
         });
         if (width) {
             options.width = parseInt(width);
@@ -527,7 +693,9 @@ const getViewAdsByReportId = async (req, res) => {
 
         res.status(200).json(reporte_view_ads);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener los ADS asociados del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener los ADS asociados del reporte ${error.message}`,
+        });
     }
 };
 
@@ -537,17 +705,22 @@ const saveUpdateViewAds = async (req, res) => {
         const { report_id } = req.params;
         let reporte_view_ads = await md.interaccion_view_ads.findOne({
             where: {
-                id_reporte: parseInt(report_id)
-            }
+                id_reporte: parseInt(report_id),
+            },
         });
         if (reporte_view_ads) {
             await reporte_view_ads.update(body);
         } else {
             reporte_view_ads = await md.interaccion_view_ads.create(body);
         }
-        res.status(200).json({ message: "Imagen de anuncio guardado correctamente.", data: reporte_view_ads });
+        res.status(200).json({
+            message: 'Imagen de anuncio guardado correctamente.',
+            data: reporte_view_ads,
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al guardar/actualizar los anuncios vistos del reporte ${error.message}` });
+        res.status(500).json({
+            message: `Error al guardar/actualizar los anuncios vistos del reporte ${error.message}`,
+        });
     }
 };
 
@@ -557,22 +730,30 @@ const uploadAdImage = async (req, res) => {
         const file = req.file;
 
         if (!file) {
-            return res.status(400).json({ message: "No se ha subido ninguna imagen." });
+            return res
+                .status(400)
+                .json({ message: 'No se ha subido ninguna imagen.' });
         }
 
         const b64 = Buffer.from(file.buffer).toString('base64');
         const dataURI = `data:${file.mimetype};base64,${b64}`;
-        const resp_cloudinary = await cloudinary.uploader.upload(dataURI, { folder: 'SMID/VIEW ADS' });
+        const resp_cloudinary = await cloudinary.uploader.upload(dataURI, {
+            folder: 'SMID/VIEW ADS',
+        });
 
         await md.view_ads.create({
             id_reporte: parseInt(report_id),
             usuario_creacion: req.user.id,
-            image_url: resp_cloudinary.public_id
+            image_url: resp_cloudinary.public_id,
         });
 
-        res.status(200).json({ message: "Imagen de anuncio subida exitosamente." });
+        res.status(200).json({
+            message: 'Imagen de anuncio subida exitosamente.',
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al subir la imagen del anuncio ${error.message}` });
+        res.status(500).json({
+            message: `Error al subir la imagen del anuncio ${error.message}`,
+        });
     }
 };
 
@@ -582,17 +763,23 @@ const deleteAdImage = async (req, res) => {
         const viewAd = await md.view_ads.findOne({
             where: {
                 image_url: image_url,
-            }
+            },
         });
         if (!viewAd) {
-            return res.status(404).json({ message: 'No se encontró la imagen del anuncio para eliminar' });
+            return res.status(404).json({
+                message: 'No se encontró la imagen del anuncio para eliminar',
+            });
         }
         await cloudinary.uploader.destroy(viewAd.image_url);
         await viewAd.destroy();
 
-        res.status(200).json({ message: "Imagen de anuncio eliminada exitosamente." });
+        res.status(200).json({
+            message: 'Imagen de anuncio eliminada exitosamente.',
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al eliminar la imagen del anuncio ${error.message}` });
+        res.status(500).json({
+            message: `Error al eliminar la imagen del anuncio ${error.message}`,
+        });
     }
 };
 
@@ -608,7 +795,9 @@ const getMapByReportID = async (req, res) => {
             attributes: ['id_mapa'],
         });
         if (!report) {
-            return res.status(400).json({ message: `Reporte no encontrado con ID ${report_id}` });
+            return res
+                .status(400)
+                .json({ message: `Reporte no encontrado con ID ${report_id}` });
         }
         let model = null;
         if (report.id_mapa === 1) {
@@ -630,19 +819,260 @@ const getMapByReportID = async (req, res) => {
             // Argentina
             model = md.mapa_argentina;
         } else {
-            return res.status(400).json({ message: `Mapa no encontrado con ID ${report.id_mapa}` });
+            return res.status(400).json({
+                message: `Mapa no encontrado con ID ${report.id_mapa}`,
+            });
         }
         const map_data = await model.findOne({
             where: {
                 id_reporte: report_id,
             },
             attributes: {
-                exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion', 'fecha_modificacion', 'fecha_eliminacion'],
+                exclude: [
+                    'usuario_creacion',
+                    'usuario_modificacion',
+                    'usuario_eliminacion',
+                    'fecha_modificacion',
+                    'fecha_eliminacion',
+                ],
             },
         });
         res.status(200).json(map_data);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener el mapa ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener el mapa ${error.message}`,
+        });
+    }
+};
+
+// ************** DASHBOARD
+const getDashboardData = async (req, res) => {
+    try {
+        const { campaign_id } = req.params;
+        const campanas = await md.campanas.findByPk(campaign_id, {
+            attributes: [
+                'id',
+                [
+                    md.Sequelize.fn(
+                        'TRIM',
+                        md.Sequelize.col('campanas.nombre'),
+                    ),
+                    'nombre',
+                ],
+            ],
+            include: [
+                {
+                    model: md.reportes,
+                    where: {
+                        activo: true,
+                    },
+                    required: false,
+                    as: 'reportes',
+                    attributes: [
+                        'id',
+                        'nombre',
+                        'fecha_ini',
+                        'fecha_fin',
+                        'objetivo_proyectado',
+                        'id_objetivo',
+                        'cp',
+                        'presupuesto',
+                    ],
+                    include: [
+                        {
+                            model: md.reporte_dia,
+                            where: md.Sequelize.where(
+                                md.Sequelize.col(
+                                    'reportes->reporte_dia.id_objetivo',
+                                ),
+                                Op.eq,
+                                md.Sequelize.col('reportes.id_objetivo'),
+                            ),
+                            required: false,
+                            as: 'reporte_dia',
+                            attributes: [
+                                'id',
+                                'valor',
+                                'dia',
+                                'mes',
+                                'anio',
+                                'id_reporte',
+                            ],
+                        },
+                        {
+                            model: md.plataformas,
+                            as: 'plataforma',
+                            attributes: ['id', 'plataforma'],
+                        },
+                        {
+                            model: md.objetivos,
+                            as: 'objetivo',
+                            attributes: ['id', 'objetivo'],
+                        },
+                        {
+                            model: md.reporte_objetivos_secundarios,
+                            as: 'objetivos_secundarios',
+                            attributes: ['id_objetivo', 'valor'],
+                            include: [
+                                {
+                                    model: md.objetivos,
+                                    as: 'objetivo',
+                                    attributes: ['id', 'objetivo'],
+                                },
+                            ],
+                        },
+                        {
+                            model: md.interaccion_dispositivo,
+                            as: 'dispositivos',
+                            attributes: [
+                                'id',
+                                'porcentaje_tablet',
+                                'porcentaje_smartphone',
+                                'porcentaje_laptop',
+                            ],
+                        },
+                        {
+                            model: md.interaccion_edad,
+                            as: 'edades',
+                            attributes: [
+                                'id',
+                                'porcentaje1',
+                                'porcentaje2',
+                                'porcentaje3',
+                                'porcentaje4',
+                                'porcentaje5',
+                                'porcentaje6',
+                                'porcentaje7',
+                                'porcentaje0',
+                            ],
+                        },
+                        {
+                            model: md.interaccion_hora,
+                            as: 'horas',
+                            attributes: [
+                                'id',
+                                'h1',
+                                'h2',
+                                'h3',
+                                'h4',
+                                'h5',
+                                'h6',
+                                'h7',
+                                'h8',
+                                'h9',
+                                'h10',
+                                'h11',
+                                'h12',
+                                'h13',
+                                'h14',
+                                'h15',
+                                'h16',
+                                'h17',
+                                'h18',
+                                'h19',
+                                'h20',
+                                'h21',
+                                'h22',
+                                'h23',
+                                'h24',
+                            ],
+                        },
+                        {
+                            model: md.mapa_bolivia,
+                            as: 'mapa_bolivia',
+                            attributes: [
+                                'id',
+                                'lapaz',
+                                'santacruz',
+                                'cochabamba',
+                                'oruro',
+                                'tarija',
+                                'pando',
+                                'beni',
+                                'sucre',
+                                'potosi',
+                            ],
+                        },
+                        {
+                            model: md.interaccion_genero,
+                            as: 'generos',
+                            attributes: ['id', 'porcentaje', 'genero'],
+                        },
+                        {
+                            model: md.segmentacion,
+                            as: 'segmentacion',
+                            attributes: [
+                                'id',
+                                'segmentacion',
+                                'demografia',
+                                'geo_segmentacion',
+                                'retargeting',
+                                'learning',
+                                'palabras_clave',
+                            ],
+                        },
+                        {
+                            model: md.funnel_stage,
+                            as: 'funnel_stage',
+                            attributes: [
+                                'id',
+                                'punto1',
+                                'punto2',
+                                'punto3',
+                                'punto4',
+                                'activo',
+                            ],
+                        },
+                        {
+                            model: md.view_ads,
+                            as: 'view_ads',
+                            attributes: [
+                                'id',
+                                'imagen',
+                                'link_end_point',
+                                'title',
+                                'image_url',
+                                'imagen_url_completa',
+                            ],
+                        },
+                    ],
+                },
+            ],
+        });
+        if (!campanas) {
+            return res
+                .status(404)
+                .json({ message: 'No se encontró la campaña' });
+        }
+        const resultado = campanas.toJSON();
+        for (const reporte of resultado.reportes) {
+            reporte.percent = await percentDias(reporte, reporte.id_objetivo);
+            reporte.objetivo_logrado = await getObjetivoLogrado(
+                reporte.id,
+                reporte.id_objetivo,
+            );
+
+            let progreso = await getProgresoPresupuesto(
+                reporte.objetivo_logrado,
+                reporte,
+            );
+            reporte.progreso_presupuesto = progreso.monto;
+            reporte.porcentaje_presupuesto = progreso.porcentaje;
+
+            for (const objetivo_secundario of reporte.objetivos_secundarios) {
+                objetivo_secundario.percent = await percentDias(
+                    reporte,
+                    objetivo_secundario.id_objetivo,
+                );
+                objetivo_secundario.objetivo_logrado =
+                    objetivo_secundario.valor;
+            }
+        }
+        res.status(200).json(resultado);
+    } catch (error) {
+        res.status(500).json({
+            message: `Error al obtener los datos del dashboard ${error.message}`,
+        });
     }
 };
 
@@ -656,20 +1086,26 @@ const reporteDiasReview = async (req, res) => {
         let body = req.body;
 
         if (!body.year || !body.month) {
-            return res.status(400).send({ message: "El año y el mes son obligatorios." });
+            return res
+                .status(400)
+                .send({ message: 'El año y el mes son obligatorios.' });
         }
 
         // let days_in_month = moment(body.year + '-' + body.month).daysInMonth();
         let days_in_month = DateTime.fromObject({
             year: body.year,
-            month: body.month
+            month: body.month,
         }).daysInMonth;
 
         let query = {
             fecha_inicio: { [md.Sequelize.Op.ne]: null },
             presupuesto: { [md.Sequelize.Op.ne]: null },
             // servicio:true,
-            [md.Sequelize.Op.and]: [md.sequelize.literal(`(fecha_inicio >= '${body.year}-${body.month}-1' AND fecha_inicio <= '${body.year}-${body.month}-${days_in_month}') OR (fecha_final >= '${body.year}-${body.month}-1' AND fecha_final <= '${body.year}-${body.month}-${days_in_month}')`)],
+            [md.Sequelize.Op.and]: [
+                md.sequelize.literal(
+                    `(fecha_inicio >= '${body.year}-${body.month}-1' AND fecha_inicio <= '${body.year}-${body.month}-${days_in_month}') OR (fecha_final >= '${body.year}-${body.month}-1' AND fecha_final <= '${body.year}-${body.month}-${days_in_month}')`,
+                ),
+            ],
         };
 
         if (body.users && body.users.length > 0) {
@@ -685,11 +1121,21 @@ const reporteDiasReview = async (req, res) => {
         }
 
         if (body.estado_pauta && body.estado_pauta != undefined) {
-            query.estado_pauta = body.estado_pauta == 'abierta' ? true : body.estado_pauta == 'cerrada' ? false : '';
+            query.estado_pauta =
+                body.estado_pauta == 'abierta'
+                    ? true
+                    : body.estado_pauta == 'cerrada'
+                      ? false
+                      : '';
         }
 
         if (body.status_pago && body.status_pago != undefined) {
-            query.pagado = body.status_pago == 'pagado' ? true : body.status_pago == 'impago' ? false : '';
+            query.pagado =
+                body.status_pago == 'pagado'
+                    ? true
+                    : body.status_pago == 'impago'
+                      ? false
+                      : '';
         }
 
         if (body.cta_title && body.cta_title != undefined) {
@@ -703,10 +1149,13 @@ const reporteDiasReview = async (req, res) => {
                 // add attribute id_usuario from id_reporte.id_usuario
                 attributes: ['id', 'valor', 'dia', 'mes', 'anio', 'id_reporte'],
                 where: {
-                    id_objetivo: md.sequelize.fn('', md.sequelize.col('reportes.id_objetivo'))
+                    id_objetivo: md.sequelize.fn(
+                        '',
+                        md.sequelize.col('reportes.id_objetivo'),
+                    ),
                 },
                 required: false,
-            }
+            },
         ];
         if (id_categoria || id_empresa) {
             const includeCampana = {
@@ -718,22 +1167,26 @@ const reporteDiasReview = async (req, res) => {
 
             // Si hay filtro por categoría o empresa, incluye Categoria
             if (id_categoria || id_empresa) {
-                includeCampana.include = [{
-                    model: md.categorias,
-                    as: 'categorias',
-                    attributes: ['id', 'nombre'],
-                    required: true,
-                }];
+                includeCampana.include = [
+                    {
+                        model: md.categorias,
+                        as: 'categorias',
+                        attributes: ['id', 'nombre'],
+                        required: true,
+                    },
+                ];
 
                 // Si hay filtro por empresa, añade Empresa al JOIN
                 if (id_empresa) {
-                    includeCampana.include[0].include = [{
-                        model: md.empresas,
-                        as: 'empresas',
-                        attributes: ['id', 'nombre'],
-                        required: true,
-                        where: { id: id_empresa }, // Filtro obligatorio si se envía
-                    }];
+                    includeCampana.include[0].include = [
+                        {
+                            model: md.empresas,
+                            as: 'empresas',
+                            attributes: ['id', 'nombre'],
+                            required: true,
+                            where: { id: id_empresa }, // Filtro obligatorio si se envía
+                        },
+                    ];
                 }
             }
 
@@ -744,18 +1197,22 @@ const reporteDiasReview = async (req, res) => {
             as: 'campana',
             attributes: ['id', 'nombre', 'id_categoria'], // No devuelve datos de Campana (solo para JOIN)
             required: true, // INNER JOIN
-            include: [{
-                model: md.categorias,
-                as: 'categoria',
-                attributes: ['id', 'nombre'],
-                required: false,
-                include: [{
-                    model: md.empresas,
-                    as: 'empresa',
+            include: [
+                {
+                    model: md.categorias,
+                    as: 'categoria',
                     attributes: ['id', 'nombre'],
                     required: false,
-                }]
-            }]
+                    include: [
+                        {
+                            model: md.empresas,
+                            as: 'empresa',
+                            attributes: ['id', 'nombre'],
+                            required: false,
+                        },
+                    ],
+                },
+            ],
         });
         const count = await md.reportes.findAndCountAll({
             where: query,
@@ -768,19 +1225,31 @@ const reporteDiasReview = async (req, res) => {
             offset: offset,
             limit: limit,
             include: includes,
-            attributes: ['id', 'fecha_inicio', 'fecha_final', 'nombre', 'id_campana', 'id_objetivo', 'objetivo_proyectado', 'id_usuario', 'activo',
-                [md.sequelize.literal(`
+            attributes: [
+                'id',
+                'fecha_inicio',
+                'fecha_final',
+                'nombre',
+                'id_campana',
+                'id_objetivo',
+                'objetivo_proyectado',
+                'id_usuario',
+                'activo',
+                [
+                    md.sequelize.literal(`
                     (SELECT SUM(valor) 
                      FROM reporte_dia 
                      WHERE reporte_dia.id_reporte = reportes.id and reporte_dia.id_objetivo = reportes.id_objetivo)
-                  `), 'sum_total']
+                  `),
+                    'sum_total',
+                ],
             ],
             order: [
                 [{ model: md.reporte_dia, as: 'reporte_dia' }, 'anio', 'ASC'],
                 [{ model: md.reporte_dia, as: 'reporte_dia' }, 'mes', 'ASC'],
-                [{ model: md.reporte_dia, as: 'reporte_dia' }, 'dia', 'ASC']
+                [{ model: md.reporte_dia, as: 'reporte_dia' }, 'dia', 'ASC'],
             ],
-            raw: false // Para obtener instancias de Sequelize (mejor para relaciones)
+            raw: false, // Para obtener instancias de Sequelize (mejor para relaciones)
         });
 
         res.status(200).send({
@@ -788,10 +1257,12 @@ const reporteDiasReview = async (req, res) => {
             items: reportes,
         });
     } catch (error) {
-        console.log('error', error)
-        res.status(500).send({ message: "Ocurrió un error al buscar los reportes. " + error });
+        console.log('error', error);
+        res.status(500).send({
+            message: 'Ocurrió un error al buscar los reportes. ' + error,
+        });
     }
-}
+};
 
 module.exports = {
     getById,
@@ -815,6 +1286,7 @@ module.exports = {
     saveUpdateViewAds,
     uploadAdImage,
     deleteAdImage,
-    getMapByReportID,    
+    getMapByReportID,
     reporteDiasReview,
+    getDashboardData,
 };

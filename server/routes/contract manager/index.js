@@ -27,11 +27,13 @@ module.exports = (app) => {
 
     // CONTRACTS
     app.get(process.env.PREFIX_API + '/contracts/all', sessionAuth, contracts.getAll);
+    app.get(process.env.PREFIX_API + '/contracts/one/:id', sessionAuth, contracts.getById);
     app.patch(process.env.PREFIX_API + '/contracts/update/application_status/:contractId/:applicationStatusId', sessionAuth, contracts.changeApplicationStatus);
     app.patch(process.env.PREFIX_API + '/contracts/update/applicant/:contractId/:applicantId', sessionAuth, contracts.changeApplicant);
     app.patch(process.env.PREFIX_API + '/contracts/update/client_support/:contractId/:clientSupportId', sessionAuth, contracts.changeClientSupport);
     app.patch(process.env.PREFIX_API + '/contracts/update/responsible/:contractId/:responsibleId', sessionAuth, contracts.changeResponsible);
-    app.patch(process.env.PREFIX_API + '/contracts/update/observations/:contractId', sessionAuth, contracts.changeObservations);        
+    app.patch(process.env.PREFIX_API + '/contracts/update/observations/:contractId', sessionAuth, contracts.changeObservations);
+    app.post(process.env.PREFIX_API + '/contracts/notify_whatsapp', sessionAuth, contracts.notifyWhatsapp);
 
     // SIGNED CONTRACTS
     app.post(process.env.PREFIX_API + '/signed_contracts/upload/:contractId', sessionAuth, uploadContract.single('file'), signed_contracts.uploadSignedContract);

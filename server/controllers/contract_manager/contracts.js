@@ -1,6 +1,7 @@
 const { getYear, parseISO } = require('date-fns');
 const md = require('../../models');
 const { generateContractCode } = require('../../helps');
+const { notifyContractsWhatsapp } = require('../../services/contractNotificationService');
 
 const getAll = async (req, res) => {
     try {
@@ -32,6 +33,30 @@ const getAll = async (req, res) => {
         res.status(200).json(contracts);
     } catch (error) {
         res.status(500).json({ message: `Error al obtener los contratos: ${error.message}` });
+    }
+}
+
+const getById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const contract = await md.contracts.scope([
+            'withCompanyFormComplete',
+            'withApplicants',
+            'withClientSupport',
+            'withResponsibles',
+            'withApplicationStatus',
+            'withSignedContracts'
+        ]).findByPk(id);
+        if (!contract) {
+            return res.status(404).json({ message: "No se encuentra el contrato con el ID especificado." });
+        }
+        const code = generateContractCode(contract.application_date, contract.id);
+        res.status(200).json({
+            ...contract.toJSON(),
+            code,
+        });
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener el contrato: ${error.message}` });
     }
 }
 
@@ -126,11 +151,29 @@ const changeObservations = async (req, res) => {
     }
 }
 
+const notifyWhatsapp = async (req, res) => {
+    try {
+        const { templateName, languageCode, components } = req.body;
+        if (!templateName) {
+            return res.status(400).json({ message: 'templateName es requerido' });
+        }
+        const results = await notifyContractsWhatsapp(templateName, languageCode, components);
+        if (results.length === 0) {
+            return res.status(404).json({ message: 'No hay numeros configurados para notificaciones de WhatsApp de contratos' });
+        }
+        res.status(200).json({ results });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+}
+
     module.exports = {
     getAll,
+    getById,
     changeApplicationStatus,
     changeApplicant,
     changeClientSupport,
     changeResponsible,
-    changeObservations,    
+    changeObservations,
+    notifyWhatsapp,
 }

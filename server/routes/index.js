@@ -9,6 +9,7 @@ const objetivos = require('../controllers/objetivos');
 const segmentaciones = require('../controllers/segmentacion');
 const seguimiento = require('../controllers/seguimiento');
 const utilities = require('../controllers/utilities');
+const systemSettings = require('../controllers/system_settings');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
@@ -64,6 +65,9 @@ module.exports = (app) => {
     app.put(process.env.PREFIX_API + '/reports/enable_disable/:id', sessionAuth, reportes.enableDisableReport);
     app.delete(process.env.PREFIX_API + '/reports/delete/:id', sessionAuth, reportes.deleteReport);
 
+    // DASHBOARD
+    app.get(process.env.PREFIX_API + '/reports/dashboard/:campaign_id', reportes.getDashboardData);
+
     // OBJETIVOS SECUNDARIOS
     app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, reportes.getSecondaryObjectivesByReportId);
     app.post(process.env.PREFIX_API + '/reports/secondary_objectives/save/:report_id', sessionAuth, reportes.saveUpdateSecondaryObjectives);
@@ -113,6 +117,13 @@ module.exports = (app) => {
     // UTILIDADES
     app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
     app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
+
+    // CONFIGURACIONES GENERALES
+    app.get(process.env.PREFIX_API + '/system_settings/all', sessionAuth, systemSettings.getAll);
+    app.get(process.env.PREFIX_API + '/system_settings/one/:id', sessionAuth, systemSettings.getById);
+    app.post(process.env.PREFIX_API + '/system_settings/create', sessionAuth, systemSettings.create);
+    app.put(process.env.PREFIX_API + '/system_settings/update/:id', sessionAuth, systemSettings.update);
+    app.delete(process.env.PREFIX_API + '/system_settings/remove/:id', sessionAuth, systemSettings.remove);
 
     // GESTOR DE PROSPECTOS - LEAD MANAGER
 

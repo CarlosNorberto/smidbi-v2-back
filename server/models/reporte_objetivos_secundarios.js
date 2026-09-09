@@ -26,5 +26,12 @@ module.exports = (sequelize, DataTypes) => {
         timestamps: false
     });
 
+    ReporteObjetivosSecundarios.associate = (models) => {
+        ReporteObjetivosSecundarios.belongsTo(models.objetivos, {
+            foreignKey: 'id_objetivo',
+            as: 'objetivo'
+        });
+    };
+
     return ReporteObjetivosSecundarios;
 };

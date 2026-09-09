@@ -1,25 +1,3 @@
-// CREATE TABLE public.mapa_bolivia (
-// 	id int4 DEFAULT nextval('interaccion_ciudad_id_seq'::regclass) NOT NULL,
-// 	id_reporte int4 NOT NULL,
-// 	lapaz int8 DEFAULT 0 NULL,
-// 	santacruz int8 DEFAULT 0 NULL,
-// 	cochabamba int8 DEFAULT 0 NULL,
-// 	oruro int8 DEFAULT 0 NULL,
-// 	tarija int8 DEFAULT 0 NULL,
-// 	pando int8 DEFAULT 0 NULL,
-// 	beni int8 DEFAULT 0 NULL,
-// 	sucre int8 DEFAULT 0 NULL,
-// 	potosi int8 DEFAULT 0 NULL,
-// 	activo bool DEFAULT true NULL,
-// 	usuario_creacion int4 NOT NULL,
-// 	fecha_creacion timestamp DEFAULT now() NOT NULL,
-// 	usuario_modificacion int4 NULL,
-// 	fecha_modificacion timestamp NULL,
-// 	usuario_eliminacion int4 NULL,
-// 	fecha_eliminacion timestamp NULL,
-// 	CONSTRAINT interaccion_ciudad_pkey PRIMARY KEY (id),
-// 	CONSTRAINT mapa_bolivia_reportes_fk FOREIGN KEY (id_reporte) REFERENCES public.reportes(id) ON DELETE CASCADE
-// );
 module.exports = (sequelize, DataTypes) => {
     const ReporteMapBolivia = sequelize.define('mapa_bolivia', {
         id: {
