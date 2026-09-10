@@ -62,6 +62,7 @@ app.use((req, res, next) => {
 
 // ROUTES
 require('./server/routes')(app);
+require('./server/routes/campaign_manager')(app);
 require('./server/routes/lead_manager')(app);
 require('./server/routes/tasks')(app);
 require('./server/routes/contract manager')(app);

@@ -1,4 +1,4 @@
-const md = require('../models');
+const md = require('../../models');
 
 const getAllByReportId = async (req, res) => {
     try {

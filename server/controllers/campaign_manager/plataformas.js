@@ -1,4 +1,4 @@
-const md = require('../models');
+const md = require('../../models');
 
 const getAll = async (req, res) => {
     try {

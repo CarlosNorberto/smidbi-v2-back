@@ -13,6 +13,10 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             allowNull: false,
         },
+        read_at: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
     }, {
         tableName: 'tasks_card_responsibles',
         timestamps: false,

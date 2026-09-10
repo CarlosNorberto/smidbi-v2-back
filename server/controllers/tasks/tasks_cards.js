@@ -165,8 +165,15 @@ const update = async (req, res) => {
                 });
             }
 
-            await md.tasks_card_responsibles.destroy({ where: { card_id: id } });
-            for (const resp of responsibles) {
+            // Solo se tocan los responsables que realmente cambiaron: destruir todo y
+            // recrear reseteaba read_at de gente que no cambió, haciendo reaparecer
+            // notificaciones ya leídas cada vez que se tocaba a cualquier otro responsable.
+            if (removed.length > 0) {
+                await md.tasks_card_responsibles.destroy({
+                    where: { card_id: id, responsible_id: removed.map(r => r.id) },
+                });
+            }
+            for (const resp of added) {
                 await md.tasks_card_responsibles.create({
                     card_id: id,
                     responsible_id: resp.id,
@@ -224,6 +231,104 @@ const update = async (req, res) => {
     }
 };
 
+/**
+ * Devuelve las tarjetas de tareas pendientes (no completadas) donde el
+ * usuario autenticado figura como responsable Y aún no marcó como leída esa
+ * asignación (tasks_card_responsibles.read_at IS NULL), para alimentar la
+ * campanita de notificaciones. Ordenadas por vencimiento más próximo primero.
+ */
+const getAssignedToMe = async (req, res) => {
+    try {
+        const cards = await md.tasks_cards.findAll({
+            where: { completed: false },
+            include: [
+                {
+                    model: md.usuarios,
+                    as: 'responsibles',
+                    where: { id: req.user.id },
+                    required: true,
+                    through: { attributes: [], where: { read_at: null } },
+                    attributes: [],
+                },
+                {
+                    model: md.reportes,
+                    as: 'report',
+                    attributes: ['id', 'nombre'],
+                    include: [
+                        {
+                            model: md.campanas,
+                            as: 'campana',
+                            attributes: ['id', 'nombre'],
+                        },
+                    ],
+                },
+            ],
+            // Tareas sin fecha de vencimiento (year/month/day = 0) van al final,
+            // en vez de primero como saldría de un ORDER BY numérico simple.
+            order: [
+                [md.sequelize.literal('CASE WHEN "tasks_cards"."exp_date_year" = 0 THEN 1 ELSE 0 END'), 'ASC'],
+                ['exp_date_year', 'ASC'],
+                ['exp_date_month', 'ASC'],
+                ['exp_date_day', 'ASC'],
+            ],
+        });
+
+        const result = cards.map((card) => {
+            if (card.exp_date_year && card.exp_date_month && card.exp_date_day) {
+                card.dataValues.expired_status = getExpirationStatus(card);
+                card.dataValues.expired_date = new Date(
+                    card.exp_date_year, card.exp_date_month - 1, card.exp_date_day,
+                    card.exp_time_hour, card.exp_time_minute,
+                );
+            } else {
+                card.dataValues.expired_status = '';
+                card.dataValues.expired_date = null;
+            }
+            return card;
+        });
+
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener las tareas asignadas' });
+    }
+};
+
+/**
+ * Marca como leída (para el usuario autenticado) su asignación como
+ * responsable de una tarjeta puntual. No afecta la tarea en sí ni a otros
+ * responsables, solo oculta esa notificación para quien la marcó.
+ */
+const markAssignedAsRead = async (req, res) => {
+    try {
+        const cardId = req.params.cardId;
+        const [updatedCount] = await md.tasks_card_responsibles.update(
+            { read_at: new Date() },
+            { where: { card_id: cardId, responsible_id: req.user.id } },
+        );
+        if (updatedCount === 0) {
+            return res.status(404).json({ message: 'No se encontró la asignación para este usuario' });
+        }
+        res.status(200).json({ message: 'Notificación marcada como leída' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error al marcar la notificación como leída' });
+    }
+};
+
+/**
+ * Marca como leídas todas las asignaciones pendientes del usuario autenticado.
+ */
+const markAllAssignedAsRead = async (req, res) => {
+    try {
+        await md.tasks_card_responsibles.update(
+            { read_at: new Date() },
+            { where: { responsible_id: req.user.id, read_at: null } },
+        );
+        res.status(200).json({ message: 'Notificaciones marcadas como leídas' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error al marcar las notificaciones como leídas' });
+    }
+};
+
 const remove = async (req, res) => {
     try {
         const id = req.params.id;
@@ -243,4 +348,7 @@ module.exports = {
     save,
     update,
     remove,
+    getAssignedToMe,
+    markAssignedAsRead,
+    markAllAssignedAsRead,
 };

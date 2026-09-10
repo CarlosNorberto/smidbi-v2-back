@@ -29,7 +29,7 @@ const campaignSearch = async (req, res) => {
                 }
             ]
         };    
-        if (req.user.role.rol === 'admin') {
+        if (['admin', 'superadmin'].includes(req.user.role?.rol)) {
             delete where[Op.and][1]; // eliminar filtro por usuario para admin
         }
         // check user role admin: show all, else filter by user_id        
@@ -100,7 +100,7 @@ const companySearch = async (req, res) => {
                 { id_usuario: req.user.id }
             ]
         };
-        if (req.user.role.rol === 'admin') {
+        if (['admin', 'superadmin'].includes(req.user.role?.rol)) {
             delete where[Op.and][1]; // eliminar filtro por usuario para admin
         }
         const empresas = await md.empresas.findAll({

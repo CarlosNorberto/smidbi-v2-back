@@ -44,7 +44,7 @@ const LoginLocalStrategy = (app) => {
                     user_name: user.usuario,
                     name: user.nombre,
                     time_zone: user.time_zone,
-                    role: user.role.rol,
+                    role: user.role?.rol || null,
                 });
             });
         })(req, res, next);

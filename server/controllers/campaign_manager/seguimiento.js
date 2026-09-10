@@ -1,4 +1,4 @@
-const md = require('../models');
+const md = require('../../models');
 
 const loadTracking = async (req, res) => {
     try {

@@ -11,7 +11,7 @@ const getAll = async (req, res,) => {
         if (reportId) {
             whereCards.report_id = reportId;
         }else{
-            if(req.user.role.rol !== 'admin') {
+            if(!['admin', 'superadmin'].includes(req.user.role?.rol)) {
                 whereResponsibles.id = req.user.id;            
                 responsiblesRequired = true;
             }

@@ -15,6 +15,21 @@ const sessionAuth = async (req, res, next) => {
     }
 }
 
+/**
+ * Middleware para restringir el acceso a un conjunto de roles. Debe usarse
+ * después de sessionAuth, ya que depende de req.user.
+ * @param {...string} allowedRoles - Roles permitidos (ej: 'superadmin')
+ * @returns {function} Middleware de Express
+ */
+const requireRole = (...allowedRoles) => (req, res, next) => {
+    const userRole = req.user?.role?.rol;
+    if (userRole && allowedRoles.includes(userRole)) {
+        return next();
+    }
+    res.status(403).send({ message: 'Acceso denegado. No tiene permisos suficientes.' });
+}
+
 module.exports = {
     sessionAuth,
+    requireRole,
 };

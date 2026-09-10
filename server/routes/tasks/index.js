@@ -12,6 +12,10 @@ module.exports=(app)=>{
     app.get(process.env.PREFIX_API + '/tasks_lists/report/all/:reportId', sessionAuth, tasksLists.getAll);
 
     // TASKS CARDS
+    // Ruta literal antes de la dinámica ':id', porque ':id' también matchearía 'assigned_to_me'
+    app.get(process.env.PREFIX_API + '/tasks_cards/assigned_to_me', sessionAuth, tasksCards.getAssignedToMe);
+    app.put(process.env.PREFIX_API + '/tasks_cards/assigned_to_me/read_all', sessionAuth, tasksCards.markAllAssignedAsRead);
+    app.put(process.env.PREFIX_API + '/tasks_cards/assigned_to_me/:cardId/read', sessionAuth, tasksCards.markAssignedAsRead);
     app.get(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.getById);
     app.post(process.env.PREFIX_API + '/tasks_cards/save', sessionAuth, tasksCards.save);
     app.put(process.env.PREFIX_API + '/tasks_cards/update/:id', sessionAuth, tasksCards.update);

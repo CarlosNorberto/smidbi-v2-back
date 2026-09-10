@@ -1,14 +1,14 @@
-const md = require('../models');
+const md = require('../../models');
 const { Op } = require('sequelize');
 const { DateTime } = require('luxon');
-const { isBefore, addDays, parse } = require('date-fns');
+const { isBefore, addDays, parseISO } = require('date-fns');
 const {
     getUploadUrl,
     getUploadPath,
     getObjetivoLogrado,
     percentDias,
     getProgresoPresupuesto,
-} = require('../helps');
+} = require('../../helps');
 const fs = require('fs');
 const cloudinary = require('cloudinary').v2;
 
@@ -170,38 +170,58 @@ const saveUpdate = async (req, res) => {
     try {
         let body = req.body;
         body.id_usuario = req.user.id;
+        const isNewReport = !body.id;
         let report = null;
-        if (body.id) {
+        let previousFechaIni = null;
+        let previousFechaFin = null;
+
+        if (!isNewReport) {
             report = await md.reportes.findByPk(body.id);
-            if (report) {
-                // Actualizar reporte existente
-                await report.update(body);
-            } else {
+            if (!report) {
                 return res.status(404).json({
                     message: 'No se encontró el reporte para actualizar',
                 });
             }
-        } else {
-            if (body.fecha_ini) {
-                const parsed = parse(body.fecha_ini, 'yyyy/MM/dd', new Date());
-                body.fecha_ini = parsed;
-                body.fecha_inicio = parsed;
-            }
-            if (body.fecha_fin) {
-                const parsed = parse(body.fecha_fin, 'yyyy/MM/dd', new Date());
-                body.fecha_fin = parsed;
-                body.fecha_final = parsed;
-            }
+            previousFechaIni = report.fecha_ini;
+            previousFechaFin = report.fecha_fin;
+        }
+
+        // fecha_ini/fecha_fin viajan como 'YYYY-MM-DD' (fecha calendario, sin
+        // hora). Se espejan a los campos legacy fecha_inicio/fecha_final
+        // (timestamp) porque no existe ningún trigger en BD que lo haga, y
+        // reporte_dias solo se regenera si el rango realmente cambió (o es un
+        // reporte nuevo), para no reiniciar a cero los valores cargados en
+        // guardados que no tocan fechas.
+        const datesChanged =
+            isNewReport ||
+            (!!body.fecha_ini && body.fecha_ini !== previousFechaIni) ||
+            (!!body.fecha_fin && body.fecha_fin !== previousFechaFin);
+        const finalFechaIni = body.fecha_ini || previousFechaIni;
+        const finalFechaFin = body.fecha_fin || previousFechaFin;
+
+        if (body.fecha_ini) {
+            body.fecha_inicio = parseISO(body.fecha_ini);
+        }
+        if (body.fecha_fin) {
+            body.fecha_final = parseISO(body.fecha_fin);
+        }
+
+        if (isNewReport) {
             body.usuario_creacion = req.user.id;
             report = await md.reportes.create(body);
+        } else {
+            await report.update(body);
         }
-        await createDaysForReport(
-            report.id,
-            body.id_objetivo,
-            body.fecha_ini,
-            body.fecha_fin,
-            req.user.id,
-        );
+
+        if (datesChanged && finalFechaIni && finalFechaFin) {
+            await createDaysForReport(
+                report.id,
+                body.id_objetivo ?? report.id_objetivo,
+                finalFechaIni,
+                finalFechaFin,
+                req.user.id,
+            );
+        }
         res.status(200).json({
             message: 'Reporte guardado correctamente',
             data: report,
@@ -221,45 +241,36 @@ const createDaysForReport = async (
     user_id,
 ) => {
     try {
-        dateInit = new Date(dateInit);
-        dateEnd = new Date(dateEnd);
-        let current = dateInit;
-        // delete days
+        // dateInit/dateEnd llegan como 'YYYY-MM-DD' (fecha calendario) o ya
+        // como Date. parseISO trata un string solo-fecha como medianoche
+        // LOCAL (no UTC), por lo que el día no se desplaza sin importar la
+        // timezone del proceso de Node.
+        let current =
+            typeof dateInit === 'string' ? parseISO(dateInit) : dateInit;
+        const end = typeof dateEnd === 'string' ? parseISO(dateEnd) : dateEnd;
+
         await md.reporte_dia.destroy({
             where: {
                 id_reporte: reportId,
                 id_objetivo: objetivoId,
             },
         });
-        while (isBefore(current, addDays(dateEnd, 1))) {
-            const dia = current.getDate();
-            const mes = current.getMonth() + 1;
-            const anio = current.getFullYear();
-            // Verificar si el día ya existe
-            const existingDay = await md.reporte_dia.findOne({
-                where: {
-                    id_reporte: reportId,
-                    id_objetivo: objetivoId,
-                    dia: dia,
-                    mes: mes,
-                    anio: anio,
-                    usuario_modificacion: user_id,
-                },
+
+        const days = [];
+        while (isBefore(current, addDays(end, 1))) {
+            days.push({
+                id_reporte: reportId,
+                id_objetivo: objetivoId,
+                dia: current.getDate(),
+                mes: current.getMonth() + 1,
+                anio: current.getFullYear(),
+                valor: 0,
+                usuario_creacion: user_id,
             });
-            if (!existingDay) {
-                // Crear nuevo día
-                await md.reporte_dia.create({
-                    id_reporte: reportId,
-                    id_objetivo: objetivoId,
-                    dia: dia,
-                    mes: mes,
-                    anio: anio,
-                    valor: 0,
-                    usuario_creacion: user_id,
-                });
-            }
-            // Avanzar al siguiente día
             current = addDays(current, 1);
+        }
+        if (days.length > 0) {
+            await md.reporte_dia.bulkCreate(days);
         }
     } catch (error) {
         console.error(
