@@ -779,10 +779,17 @@ const uploadAdImage = async (req, res) => {
 
         await fs.promises.writeFile(destination, file.buffer);
 
+        // mismo criterio de 'orden' que usa el backend antiguo (contar + 1), para
+        // que una imagen subida desde acá aparezca al final de la galería ahí también.
+        const existingCount = await md.view_ads.count({
+            where: { id_reporte: parseInt(report_id) },
+        });
+
         await md.view_ads.create({
             id_reporte: parseInt(report_id),
             usuario_creacion: req.user.id,
             imagen: filename,
+            orden: existingCount + 1,
         });
 
         res.status(200).json({
