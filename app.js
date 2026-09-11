@@ -69,6 +69,15 @@ require('./server/routes/contract manager')(app);
 require('./server/assistant_ai/router/assistant_ai.router')(app);
 
 // MIDDLEWARE uploads
+// Carpeta compartida con el backend antiguo (server/uploads/view-ads) donde viven
+// las imágenes de anuncios (legacy y nuevas). Se monta ANTES del estático genérico
+// de abajo para que tenga prioridad; si el archivo no está ahí, cae al estático
+// genérico (uploads/ads local, copia vieja) como respaldo.
+// Si la variable de entorno no está seteada (ej. en un entorno de desarrollo sin
+// acceso a esa carpeta) simplemente no se monta, no rompe el arranque.
+if (process.env.LEGACY_ADS_UPLOADS_PATH) {
+    app.use('/uploads/ads', express.static(process.env.LEGACY_ADS_UPLOADS_PATH));
+}
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // WELCOME ROUTE

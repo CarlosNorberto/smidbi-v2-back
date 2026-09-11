@@ -10,6 +10,8 @@ const {
     getProgresoPresupuesto,
 } = require('../../helps');
 const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const cloudinary = require('cloudinary').v2;
 
 // ************** REPORTS
@@ -699,7 +701,14 @@ const getViewAdsByReportId = async (req, res) => {
             options.crop = 'limit';
         }
         for (const ad of reporte_view_ads) {
-            ad.dataValues.image_url = cloudinary.url(ad.image_url, options);
+            // 'imagen' = archivo legacy compartido con el backend antiguo (filesystem).
+            // 'image_url' = subido desde el sistema nuevo a Cloudinary (public_id).
+            if (ad.image_url) {
+                ad.dataValues.image_url = cloudinary.url(ad.image_url, options);
+                ad.dataValues.url = ad.dataValues.image_url;
+            } else {
+                ad.dataValues.url = ad.imagen_url_completa;
+            }
         }
 
         res.status(200).json(reporte_view_ads);
@@ -735,6 +744,14 @@ const saveUpdateViewAds = async (req, res) => {
     }
 };
 
+const MIME_TO_EXT = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/svg+xml': '.svg',
+};
+
 const uploadAdImage = async (req, res) => {
     try {
         const { report_id } = req.params;
@@ -746,16 +763,26 @@ const uploadAdImage = async (req, res) => {
                 .json({ message: 'No se ha subido ninguna imagen.' });
         }
 
-        const b64 = Buffer.from(file.buffer).toString('base64');
-        const dataURI = `data:${file.mimetype};base64,${b64}`;
-        const resp_cloudinary = await cloudinary.uploader.upload(dataURI, {
-            folder: 'SMID/VIEW ADS',
-        });
+        if (!process.env.LEGACY_ADS_UPLOADS_PATH) {
+            return res.status(500).json({
+                message: 'LEGACY_ADS_UPLOADS_PATH no está configurado en el servidor.',
+            });
+        }
+
+        // Se guarda en la MISMA carpeta que usa el backend antiguo (compartida por
+        // filesystem, no por copia), para que la imagen sea visible desde ambos
+        // sistemas. El nombre usa un UUID: el backend antiguo nombra sus archivos
+        // con Date.now() (solo dígitos), así que no hay riesgo de colisión.
+        const extension = path.extname(file.originalname) || MIME_TO_EXT[file.mimetype] || '.png';
+        const filename = `${crypto.randomUUID()}${extension}`;
+        const destination = path.join(process.env.LEGACY_ADS_UPLOADS_PATH, filename);
+
+        await fs.promises.writeFile(destination, file.buffer);
 
         await md.view_ads.create({
             id_reporte: parseInt(report_id),
             usuario_creacion: req.user.id,
-            image_url: resp_cloudinary.public_id,
+            imagen: filename,
         });
 
         res.status(200).json({
@@ -770,18 +797,22 @@ const uploadAdImage = async (req, res) => {
 
 const deleteAdImage = async (req, res) => {
     try {
-        const { image_url } = req.params;
-        const viewAd = await md.view_ads.findOne({
-            where: {
-                image_url: image_url,
-            },
-        });
+        const { id } = req.params;
+        const viewAd = await md.view_ads.findByPk(id);
         if (!viewAd) {
             return res.status(404).json({
                 message: 'No se encontró la imagen del anuncio para eliminar',
             });
         }
-        await cloudinary.uploader.destroy(viewAd.image_url);
+
+        if (viewAd.image_url) {
+            await cloudinary.uploader.destroy(viewAd.image_url);
+        } else if (viewAd.imagen && process.env.LEGACY_ADS_UPLOADS_PATH) {
+            const filePath = path.join(process.env.LEGACY_ADS_UPLOADS_PATH, viewAd.imagen);
+            await fs.promises.unlink(filePath).catch(() => {
+                // si el archivo ya no está en disco, igual se elimina el registro
+            });
+        }
         await viewAd.destroy();
 
         res.status(200).json({

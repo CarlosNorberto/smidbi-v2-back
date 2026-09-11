@@ -72,7 +72,7 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/reports/view_ads/:report_id', sessionAuth, reportes.getViewAdsByReportId);
     app.post(process.env.PREFIX_API + '/reports/view_ads/save/:report_id', sessionAuth, reportes.saveUpdateViewAds);
     app.post(process.env.PREFIX_API + '/reports/view_ads/upload_image/:report_id', sessionAuth, upload.single('ad_image'), reportes.uploadAdImage);
-    app.delete(process.env.PREFIX_API + '/reports/view_ads/delete_image/:image_url', sessionAuth, reportes.deleteAdImage);
+    app.delete(process.env.PREFIX_API + '/reports/view_ads/delete_image/:id', sessionAuth, reportes.deleteAdImage);
 
     // DÍAS DE REPORTES
     app.get(process.env.PREFIX_API + '/reports/days/:report_id', sessionAuth, reportes.getDaysByReportId);

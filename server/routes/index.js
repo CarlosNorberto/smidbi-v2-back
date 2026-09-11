@@ -12,6 +12,7 @@ module.exports = (app) => {
 
     // UTILIDADES
     app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
+    app.get(process.env.PREFIX_API + '/utilities/campaign_search/filters', sessionAuth, utilities.campaignSearchFilters);
     app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
 
     // CONFIGURACIONES GENERALES (acceso exclusivo para superadmin)
