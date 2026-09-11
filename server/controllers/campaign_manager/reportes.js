@@ -12,6 +12,7 @@ const {
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const sharp = require('sharp');
 const cloudinary = require('cloudinary').v2;
 
 // ************** REPORTS
@@ -752,6 +753,37 @@ const MIME_TO_EXT = {
     'image/svg+xml': '.svg',
 };
 
+const AD_IMAGE_MAX_WIDTH = 1600;
+const AD_IMAGE_QUALITY = 80;
+
+/**
+ * Redimensiona/comprime una imagen de anuncio para que no ocupe espacio de más:
+ * se ve en un "Panel de Campaña", no necesita resolución completa de cámara.
+ * No agranda imágenes más chicas que el máximo. SVG se deja intacto (es vectorial).
+ * @param {Buffer} buffer - contenido original del archivo
+ * @param {string} mimetype - mimetype reportado por multer
+ * @returns {Promise<Buffer>}
+ */
+const resizeAdImage = async (buffer, mimetype) => {
+    if (mimetype === 'image/svg+xml') return buffer;
+
+    let pipeline = sharp(buffer, { animated: mimetype === 'image/gif' }).resize({
+        width: AD_IMAGE_MAX_WIDTH,
+        withoutEnlargement: true,
+    });
+
+    if (mimetype === 'image/jpeg') {
+        pipeline = pipeline.jpeg({ quality: AD_IMAGE_QUALITY });
+    } else if (mimetype === 'image/png') {
+        pipeline = pipeline.png({ quality: AD_IMAGE_QUALITY });
+    } else if (mimetype === 'image/webp') {
+        pipeline = pipeline.webp({ quality: AD_IMAGE_QUALITY });
+    }
+    // gif y otros formatos soportados por sharp: se redimensionan sin recomprimir
+
+    return pipeline.toBuffer();
+};
+
 const uploadAdImage = async (req, res) => {
     try {
         const { report_id } = req.params;
@@ -777,7 +809,8 @@ const uploadAdImage = async (req, res) => {
         const filename = `${crypto.randomUUID()}${extension}`;
         const destination = path.join(process.env.LEGACY_ADS_UPLOADS_PATH, filename);
 
-        await fs.promises.writeFile(destination, file.buffer);
+        const resizedBuffer = await resizeAdImage(file.buffer, file.mimetype);
+        await fs.promises.writeFile(destination, resizedBuffer);
 
         // mismo criterio de 'orden' que usa el backend antiguo (contar + 1), para
         // que una imagen subida desde acá aparezca al final de la galería ahí también.
