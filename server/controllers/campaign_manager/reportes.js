@@ -66,7 +66,7 @@ const getAllByCampaign = async (req, res) => {
                         'fecha_eliminacion',
                     ],
                 },
-                order: [['id', 'DESC']],
+                order: [['fecha_creacion', 'DESC']],
                 limit,
                 offset,
             });
