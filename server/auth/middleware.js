@@ -29,7 +29,23 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
     res.status(403).send({ message: 'Acceso denegado. No tiene permisos suficientes.' });
 }
 
+/**
+ * Middleware de sesión para clientes (empresas), independiente de passport/usuarios.
+ * Debe usarse después de que /auth/client/login haya seteado req.session.empresaId.
+ * @param {object} req - Request
+ * @param {object} res - Response
+ * @param {function} next - Next
+ * @returns {void}
+ */
+const clientSessionAuth = (req, res, next) => {
+    if (req.session && req.session.empresaId) {
+        return next();
+    }
+    res.status(403).send({ message: "Acceso denegado. Por favor inicie sesión" });
+}
+
 module.exports = {
     sessionAuth,
     requireRole,
+    clientSessionAuth,
 };

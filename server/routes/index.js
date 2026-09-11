@@ -1,7 +1,8 @@
-const { sessionAuth, requireRole } = require('../auth/middleware');
+const { sessionAuth, requireRole, clientSessionAuth } = require('../auth/middleware');
 const usuarios = require('../controllers/usuarios');
 const utilities = require('../controllers/utilities');
 const systemSettings = require('../controllers/system_settings');
+const clientAuth = require('../controllers/client_auth');
 
 module.exports = (app) => {
 
@@ -9,6 +10,11 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/users/all', sessionAuth, usuarios.getAll);
     app.post(process.env.PREFIX_API + '/users/save', sessionAuth, usuarios.saveUpdate);
     app.put(process.env.PREFIX_API + '/users/change_password/:id', sessionAuth, usuarios.changePassword);
+
+    // AUTH DE CLIENTES (empresas) - independiente del login de usuarios internos
+    app.post(process.env.PREFIX_API + '/auth/client/login', clientAuth.login);
+    app.post(process.env.PREFIX_API + '/auth/client/logout', clientAuth.logout);
+    app.get(process.env.PREFIX_API + '/auth/client/me', clientSessionAuth, clientAuth.me);
 
     // UTILIDADES
     app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
