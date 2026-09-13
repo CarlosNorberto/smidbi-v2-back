@@ -71,6 +71,8 @@ async function handleChat(req, res) {
                 campaign_id: catalog.campaigns[0]?.id,
                 company_id: catalog.company?.id,
                 include_inactive: catalog.include_inactive || false,
+                start_date: entities.start_date,
+                end_date: entities.end_date,
                 entities,
                 days_ahead: entities.days_ahead ?? 7,
                 currentUser

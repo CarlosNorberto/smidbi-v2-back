@@ -20,7 +20,7 @@ const toolMap = {
     get_low_performance:        getLowPerformance,          //Implementado
     get_expiring_campaigns:     getExpiringCampaigns,       //Implementado    
     generate_campaign_report:   getCampaignStatus,          //Se reutiliza getCampaignStatus para este    
-    get_global_budget:          getGlobalBudget,            //No Implementado
+    get_global_budget:          getGlobalBudget,            //Implementado
     get_my_campaigns:           getMyCampaigns,             //Implementado
     handle_unknown:             handleUnknown
 };

@@ -242,6 +242,7 @@ const createDaysForReport = async (
     dateInit,
     dateEnd,
     user_id,
+    transaction = null,
 ) => {
     try {
         // dateInit/dateEnd llegan como 'YYYY-MM-DD' (fecha calendario) o ya
@@ -257,6 +258,7 @@ const createDaysForReport = async (
                 id_reporte: reportId,
                 id_objetivo: objetivoId,
             },
+            transaction,
         });
 
         const days = [];
@@ -273,12 +275,145 @@ const createDaysForReport = async (
             current = addDays(current, 1);
         }
         if (days.length > 0) {
-            await md.reporte_dia.bulkCreate(days);
+            await md.reporte_dia.bulkCreate(days, { transaction });
         }
     } catch (error) {
         console.error(
             `Error al crear/actualizar días para el reporte ${reportId}: ${error.message}`,
         );
+    }
+};
+
+// *********************************************//
+// **** COPIAR REPORTE (y su configuración)  ****//
+// *********************************************//
+
+// Campos que nunca se arrastran a una copia: son metadatos de la fila
+// original o números de seguimiento real (no tiene sentido que una copia
+// "recién creada" ya tenga ejecución/resultados de otro reporte).
+const REPORT_COPY_RESET_FIELDS = {
+    activo: true,
+    fecha_inicio: null,
+    fecha_final: null,
+    fecha_ini: null,
+    fecha_fin: null,
+    ejecutado: 0,
+    ejecutado_seg: null,
+    diferencia_seg: null,
+    seguimiento_finalizado: false,
+    estado_pauta: false,
+    pagado: false,
+    has_excel_ads: false,
+};
+
+const buildReportCopyData = (sourceReport, overrides, userId) => {
+    const data = sourceReport.toJSON ? sourceReport.toJSON() : { ...sourceReport };
+    delete data.id;
+    delete data.fecha_creacion;
+    delete data.fecha_modificacion;
+    delete data.fecha_eliminacion;
+    delete data.usuario_modificacion;
+    delete data.usuario_eliminacion;
+    return {
+        ...data,
+        ...REPORT_COPY_RESET_FIELDS,
+        usuario_creacion: userId,
+        id_usuario: userId,
+        ...overrides,
+    };
+};
+
+// Tablas hijas del reporte con una sola fila (o ninguna) por reporte.
+const CHILD_TABLES_SINGLE = [
+    'interaccion_dispositivo',
+    'interaccion_edad',
+    'interaccion_hora',
+    'segmentacion',
+    'mapa_bolivia',
+];
+// Tablas hijas del reporte con varias filas posibles por reporte.
+const CHILD_TABLES_MULTI = [
+    'interaccion_genero',
+    'reporte_objetivos_secundarios',
+    'funnel_stage',
+    'view_ads',
+];
+
+// Copia toda la configuración de un reporte (género, dispositivos, edades,
+// horas, segmentación, mapa, objetivos secundarios, funnel, anuncios) hacia
+// otro reporte. No copia reporte_dia: son los valores reales día a día, no
+// tiene sentido arrastrarlos a una copia.
+const copyReportChildren = async (sourceReportId, newReportId, userId, transaction) => {
+    for (const model of CHILD_TABLES_SINGLE) {
+        const row = await md[model].findOne({ where: { id_reporte: sourceReportId }, transaction });
+        if (!row) continue;
+        const data = row.toJSON();
+        delete data.id;
+        data.id_reporte = newReportId;
+        if ('usuario_creacion' in data) data.usuario_creacion = userId;
+        if ('usuario_modificacion' in data) data.usuario_modificacion = null;
+        if ('fecha_modificacion' in data) data.fecha_modificacion = null;
+        await md[model].create(data, { transaction });
+    }
+    for (const model of CHILD_TABLES_MULTI) {
+        const rows = await md[model].findAll({ where: { id_reporte: sourceReportId }, transaction });
+        for (const row of rows) {
+            const data = row.toJSON();
+            delete data.id;
+            data.id_reporte = newReportId;
+            if ('usuario_creacion' in data) data.usuario_creacion = userId;
+            if ('usuario_modificacion' in data) data.usuario_modificacion = null;
+            if ('fecha_modificacion' in data) data.fecha_modificacion = null;
+            await md[model].create(data, { transaction });
+        }
+    }
+};
+
+// Crea la copia de un reporte (fila + configuración) dentro de una
+// transacción. `overrides` define lo que cambia respecto al original
+// (nombre, campaña destino, fechas, etc.).
+const copyReportWithChildren = async (sourceReport, overrides, userId, transaction) => {
+    const data = buildReportCopyData(sourceReport, overrides, userId);
+    const newReport = await md.reportes.create(data, { transaction });
+    await copyReportChildren(sourceReport.id, newReport.id, userId, transaction);
+    return newReport;
+};
+
+const copyReport = async (req, res) => {
+    const transaction = await md.sequelize.transaction();
+    try {
+        const { id, nombre, fecha_ini, fecha_fin } = req.body;
+        if (!id || !nombre) {
+            await transaction.rollback();
+            return res.status(400).json({ message: 'Debe indicar el reporte de origen y un nombre.' });
+        }
+        const sourceReport = await md.reportes.findByPk(id, { transaction });
+        if (!sourceReport) {
+            await transaction.rollback();
+            return res.status(404).json({ message: 'No se encontró el reporte a copiar' });
+        }
+
+        const overrides = { nombre, id_campana: sourceReport.id_campana };
+        if (fecha_ini) {
+            overrides.fecha_ini = fecha_ini;
+            overrides.fecha_inicio = parseISO(fecha_ini);
+        }
+        if (fecha_fin) {
+            overrides.fecha_fin = fecha_fin;
+            overrides.fecha_final = parseISO(fecha_fin);
+        }
+
+        const newReport = await copyReportWithChildren(sourceReport, overrides, req.user.id, transaction);
+
+        if (fecha_ini && fecha_fin) {
+            await createDaysForReport(newReport.id, newReport.id_objetivo, fecha_ini, fecha_fin, req.user.id, transaction);
+        }
+
+        await transaction.commit();
+        res.status(200).json({ message: 'Reporte copiado correctamente', data: newReport });
+    } catch (error) {
+        await transaction.rollback();
+        res.status(500).json({ message: `Error al copiar el reporte: ${error.message}` });
     }
 };
 
@@ -934,6 +1069,7 @@ const getDashboardData = async (req, res) => {
         const campanas = await md.campanas.findByPk(campaign_id, {
             attributes: [
                 'id',
+                'activo',
                 [
                     md.Sequelize.fn(
                         'TRIM',
@@ -943,6 +1079,18 @@ const getDashboardData = async (req, res) => {
                 ],
             ],
             include: [
+                {
+                    model: md.categorias,
+                    as: 'categoria',
+                    attributes: ['id', 'activo'],
+                    include: [
+                        {
+                            model: md.empresas,
+                            as: 'empresa',
+                            attributes: ['id', 'activo'],
+                        },
+                    ],
+                },
                 {
                     model: md.reportes,
                     where: {
@@ -1126,7 +1274,16 @@ const getDashboardData = async (req, res) => {
                 .status(404)
                 .json({ message: 'No se encontró la campaña' });
         }
+        // La campaña (o su categoría/empresa) puede estar desactivada aunque
+        // sus reportes individuales todavía tengan activo:true — no basta con
+        // el filtro de reportes de más abajo, hay que validar toda la cadena.
+        const empresaActiva = campanas.categoria?.empresa?.activo;
+        const categoriaActiva = campanas.categoria?.activo;
+        if (!campanas.activo || !categoriaActiva || !empresaActiva) {
+            return res.status(403).json({ message: 'Esta campaña ya no está disponible.' });
+        }
         const resultado = campanas.toJSON();
+        delete resultado.categoria;
         for (const reporte of resultado.reportes) {
             reporte.percent = await percentDias(reporte, reporte.id_objetivo);
             reporte.objetivo_logrado = await getObjetivoLogrado(
@@ -1371,4 +1528,6 @@ module.exports = {
     getMapByReportID,
     reporteDiasReview,
     getDashboardData,
+    copyReport,
+    copyReportWithChildren,
 };

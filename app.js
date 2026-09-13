@@ -66,6 +66,7 @@ require('./server/routes/campaign_manager')(app);
 require('./server/routes/lead_manager')(app);
 require('./server/routes/tasks')(app);
 require('./server/routes/contract manager')(app);
+require('./server/routes/planificador')(app);
 require('./server/assistant_ai/router/assistant_ai.router')(app);
 
 // MIDDLEWARE uploads
@@ -77,6 +78,11 @@ require('./server/assistant_ai/router/assistant_ai.router')(app);
 // acceso a esa carpeta) simplemente no se monta, no rompe el arranque.
 if (process.env.LEGACY_ADS_UPLOADS_PATH) {
     app.use('/uploads/ads', express.static(process.env.LEGACY_ADS_UPLOADS_PATH));
+}
+// Carpeta compartida con el backend antiguo (server/uploads/qualify_images)
+// donde viven las imágenes de respaldo de la calificación de briefs.
+if (process.env.LEGACY_QUALIFY_IMAGES_UPLOADS_PATH) {
+    app.use('/uploads/qualify_images', express.static(process.env.LEGACY_QUALIFY_IMAGES_UPLOADS_PATH));
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

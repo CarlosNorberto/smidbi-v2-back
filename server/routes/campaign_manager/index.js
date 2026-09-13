@@ -1,4 +1,4 @@
-const { sessionAuth } = require('../../auth/middleware');
+const { sessionAuth, requireRole, internalOrClientSessionAuth } = require('../../auth/middleware');
 const empresas = require('../../controllers/campaign_manager/empresas');
 const categorias = require('../../controllers/campaign_manager/categorias');
 const campanas = require('../../controllers/campaign_manager/campanas');
@@ -36,21 +36,27 @@ module.exports = (app) => {
     // CATEGORIAS
     app.get(process.env.PREFIX_API + '/categories/one/:id', sessionAuth, categorias.getById);
     app.get(process.env.PREFIX_API + '/categories/all/:company_id', sessionAuth, categorias.getAllByCompany);
+    app.post(process.env.PREFIX_API + '/categories/create', sessionAuth, categorias.create);
+    app.put(process.env.PREFIX_API + '/categories/update/:id', sessionAuth, categorias.update);
 
     // CAMPAÑAS
     app.get(process.env.PREFIX_API + '/campaigns/one/:id', sessionAuth, campanas.getById);
     app.get(process.env.PREFIX_API + '/campaigns/all/:category_id', sessionAuth, campanas.getByCategory);
+    app.post(process.env.PREFIX_API + '/campaigns/copy', sessionAuth, campanas.copyCampaignAndReports);
+    app.post(process.env.PREFIX_API + '/campaigns/create', sessionAuth, campanas.create);
+    app.put(process.env.PREFIX_API + '/campaigns/update/:id', sessionAuth, campanas.update);
 
     // REPORTES
     app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);
     app.get(process.env.PREFIX_API + '/reports/all/:campaign_id', sessionAuth, reportes.getAllByCampaign);
     app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAll);
     app.post(process.env.PREFIX_API + '/reports/save', sessionAuth, reportes.saveUpdate);
+    app.post(process.env.PREFIX_API + '/reports/copy', sessionAuth, reportes.copyReport);
     app.put(process.env.PREFIX_API + '/reports/enable_disable/:id', sessionAuth, reportes.enableDisableReport);
     app.delete(process.env.PREFIX_API + '/reports/delete/:id', sessionAuth, reportes.deleteReport);
 
     // DASHBOARD
-    app.get(process.env.PREFIX_API + '/reports/dashboard/:campaign_id', reportes.getDashboardData);
+    app.get(process.env.PREFIX_API + '/reports/dashboard/:campaign_id', internalOrClientSessionAuth, reportes.getDashboardData);
 
     // OBJETIVOS SECUNDARIOS
     app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, reportes.getSecondaryObjectivesByReportId);
@@ -85,6 +91,10 @@ module.exports = (app) => {
 
     // PLATAFORMAS
     app.get(process.env.PREFIX_API + '/platforms/all', sessionAuth, plataformas.getAll);
+    // Administración de plataformas (superadmin): nunca se borran, solo se desactivan.
+    app.get(process.env.PREFIX_API + '/platforms/admin/all', sessionAuth, requireRole('superadmin'), plataformas.getAllAdmin);
+    app.post(process.env.PREFIX_API + '/platforms/create', sessionAuth, requireRole('superadmin'), plataformas.create);
+    app.put(process.env.PREFIX_API + '/platforms/update/:id', sessionAuth, requireRole('superadmin'), plataformas.update);
 
     // OBJETIVOS
     app.get(process.env.PREFIX_API + '/objectives/all', sessionAuth, objetivos.getAll);

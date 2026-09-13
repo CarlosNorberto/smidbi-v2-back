@@ -1,7 +1,8 @@
-const openai = require('./openai.service');
+const { getOpenAIClient } = require('./openai.service');
 const { getIntentNames, getIntentDescriptions } = require('../config/intents');
 
 const extractEntities = async (question) => {
+    const openai = await getOpenAIClient();
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -69,6 +70,20 @@ const extractEntities = async (question) => {
         const raw = response.choices[0].message.content;
         const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
 
+        let intent = getIntentNames().includes(parsed.intent)
+            ? parsed.intent
+            : 'campaign_status';
+
+        // El modelo a veces marca "unknown" a pesar de su propia regla ("nunca
+        // uses unknown si hay company_name o campaign_name") - típicamente
+        // cuando el usuario escribe solo el nombre de la campaña/empresa, sin
+        // verbo ni pregunta (ej. escribir literalmente "CHERY HIBRIDO"). Se
+        // refuerza acá en código en vez de confiar solo en que el prompt se
+        // respete siempre.
+        if (intent === 'unknown' && (parsed.company_name || parsed.campaign_name)) {
+            intent = 'campaign_status';
+        }
+
         return {
             company_name: parsed.company_name || null,
             campaign_name: parsed.campaign_name || null,
@@ -78,9 +93,7 @@ const extractEntities = async (question) => {
             start_date: parsed.start_date || null,
             end_date: parsed.end_date || null,
             days_ahead: parsed.days_ahead ?? 7,
-            intent: getIntentNames().includes(parsed.intent)
-                ? parsed.intent
-                : 'campaign_status'
+            intent
         };
     } catch {
         return {

@@ -83,6 +83,10 @@ module.exports = (sequelize, DataTypes) => {
         mobile: {
             type: DataTypes.STRING,
             allowNull: true
+        },
+        time_zone: {
+            type: DataTypes.STRING,
+            allowNull: true
         }
     }, {
         tableName: 'empresas',

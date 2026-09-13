@@ -46,6 +46,11 @@ module.exports = (sequelize, DataTypes) => {
         code: {
             type: DataTypes.STRING,
             allowNull: true
+        },
+        bloqueada: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            allowNull: false
         }
     }, {
         tableName: 'plataformas',

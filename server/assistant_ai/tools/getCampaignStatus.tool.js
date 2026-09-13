@@ -99,7 +99,9 @@ const getCampaignStatus = async ({ campaign_id, include_inactive = false, curren
                 nombre: campaign.objetivo ? campaign.objetivo.objetivo : 'N/A',
                 meta: campaign.objetivo_proyectado,
                 actual: campaign.get('sum_total') || 0,
-                porcentaje: (campaign.get('sum_total') / campaign.objetivo_proyectado * 100).toFixed(2) || 0
+                porcentaje: campaign.objetivo_proyectado > 0
+                    ? ((campaign.get('sum_total') || 0) / campaign.objetivo_proyectado * 100).toFixed(2)
+                    : 0
             },
             plataforma: campaign.plataforma ? campaign.plataforma.plataforma : 'N/A',
             link_to_report: `https://v2.smidbi.site/admin/${campaign.campana.categoria.empresa.id}/${campaign.campana.categoria.id}/${campaign.campana.id}/${campaign.id}/report/edit`

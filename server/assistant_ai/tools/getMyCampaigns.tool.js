@@ -1,7 +1,7 @@
 // tools/getMyCampaigns.tool.js
 const { Op } = require('sequelize');
 const md = require('../../models');
-const { getUserFilter } = require('../helps/helps');
+const { getUserFilter, isUnrestrictedRole } = require('../helps/helps');
 
 const getMyCampaigns = async ({ currentUser }) => {
     try {
@@ -57,7 +57,7 @@ const getMyCampaigns = async ({ currentUser }) => {
             return {
                 total: 0,
                 campaigns: [],
-                message: currentUser.role.rol === 'admin'
+                message: isUnrestrictedRole(currentUser)
                     ? 'No hay campañas activas en el sistema en este momento'
                     : 'No tienes campañas activas asignadas en este momento'
             };
@@ -116,7 +116,7 @@ const getMyCampaigns = async ({ currentUser }) => {
                     executed: parseFloat(reporte.ejecutado) || 0
                 },
                 status: daysRemaining <= 1 ? 'vence hoy' : `vence en ${daysRemaining} días`,
-                link_to_report: `https://smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+                link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
             };
         }));
 
@@ -131,7 +131,7 @@ const getMyCampaigns = async ({ currentUser }) => {
         const behind = campaigns.filter(c => c.kpi.status === 'behind').length;
 
         return {
-            context: currentUser.role.rol === 'admin'
+            context: isUnrestrictedRole(currentUser)
                 ? 'Todas las campañas activas del sistema'
                 : `Campañas asignadas a ${currentUser.nombre}`,
             summary: {

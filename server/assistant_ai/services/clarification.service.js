@@ -1,7 +1,8 @@
-const openai = require('./openai.service');
+const { getOpenAIClient } = require('./openai.service');
 
 // Redacta el mensaje de aclaración cuando hay ambigüedad
 async function generateClarification({ question, options, ambiguous_type }) {
+    const openai = await getOpenAIClient();
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -29,6 +30,7 @@ async function generateClarification({ question, options, ambiguous_type }) {
 
 // Redacta el mensaje cuando no se encuentra nada
 async function generateNotFound({ question, entities, not_found_type }) {
+    const openai = await getOpenAIClient();
     const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
@@ -47,7 +49,9 @@ async function generateNotFound({ question, entities, not_found_type }) {
   
                         El sistema buscó una ${not_found_type} y no encontró resultados.
                     ${not_found_type === 'company'
-                        ? `No existe ninguna empresa/cliente con el nombre "${entities.company_name}" en el sistema.`
+                        ? (entities.company_name
+                            ? `No existe ninguna empresa/cliente con el nombre "${entities.company_name}" en el sistema.`
+                            : `La pregunta necesita saber de qué empresa/cliente se trata, pero no se mencionó ninguna.`)
                         : `No se encontraron campañas con el nombre "${entities.campaign_name}" en el sistema.`
                     }
   

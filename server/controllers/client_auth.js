@@ -6,7 +6,7 @@ const md = require('../models');
 // existentes de los clientes.
 const login = async (req, res) => {
     try {
-        const { usuario, password } = req.body;
+        const { usuario, password, remember } = req.body;
         if (!usuario || !password) {
             return res.status(400).json({ message: 'Usuario y contraseña son requeridos.' });
         }
@@ -21,6 +21,12 @@ const login = async (req, res) => {
         }
 
         req.session.empresaId = empresa.id;
+        if (remember) {
+            req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
+        } else {
+            req.session.cookie.expires = false;
+            req.session.cookie.maxAge = null;
+        }
         res.status(200).json(empresa);
     } catch (error) {
         res.status(500).json({ message: `Error al iniciar sesión: ${error.message}` });

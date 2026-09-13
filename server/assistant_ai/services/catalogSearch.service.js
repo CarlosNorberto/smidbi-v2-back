@@ -8,6 +8,16 @@ function formatDate(date) {
     return `${day}/${month}/${year}`;
 }
 
+// Patrón ILIKE tolerante: en vez de "%texto%" (que exige el texto completo
+// como substring exacto), separa por palabras y arma "%palabra1%palabra2%...".
+// Esto evita falsos "no encontrado" cuando el extractor de entidades (LLM)
+// omite o reordena alguna preposición/artículo del nombre real, o cuando
+// separa mal un nombre de campaña en dos campos (ver más abajo).
+function buildFuzzyNamePattern(text) {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    return `%${words.join('%')}%`;
+}
+
 const getCatalog = async (entities, needs, currentUser) => {
     try {
         let company = null;
@@ -16,14 +26,23 @@ const getCatalog = async (entities, needs, currentUser) => {
             const companies = await md.empresas.findAll({
                 where: {
                     activo: true,
-                    nombre: { [Op.iLike]: `%${entities.company_name}%` }
+                    nombre: { [Op.iLike]: buildFuzzyNamePattern(entities.company_name) }
                 },
                 attributes: ['id', 'nombre']
             });
 
             if (companies.length === 0) {
-                if (!entities.campaign_name && needs.includes('campaign')) {
-                    entities.campaign_name = entities.company_name;
+                if (needs.includes('campaign')) {
+                    // El extractor de entidades a veces separa mal el nombre de una
+                    // campaña en dos campos cuando contiene alguna palabra que
+                    // "suena" a nombre de empresa (ej. "Display Cluster de Sitios
+                    // Web" -> company_name: "Sitios Web", campaign_name: "Display
+                    // Cluster"). Como esa empresa no existe, se reintenta la
+                    // búsqueda de campaña combinando ambos textos antes de
+                    // rendirse.
+                    entities.campaign_name = entities.campaign_name
+                        ? `${entities.campaign_name} ${entities.company_name}`
+                        : entities.company_name;
                     entities.company_name = null;
                 } else {
                     return {
@@ -48,7 +67,13 @@ const getCatalog = async (entities, needs, currentUser) => {
         }
 
         if (!needs.includes('campaign')) {
-            if (needs.includes('company') && !company && entities.company_name) {
+            // Si el intent necesita una empresa (client_summary, active_campaigns)
+            // y no se pudo resolver ninguna -sea porque no coincidió el nombre,
+            // o porque la pregunta nunca mencionó una empresa-, hay que pedir
+            // aclaración en vez de seguir adelante: las tools de estos intents
+            // arman su propio "where: { id: company_id }" y truenan si
+            // company_id llega undefined.
+            if (needs.includes('company') && !company) {
                 return {
                     ambiguous: false,
                     company: null,
@@ -69,7 +94,17 @@ const getCatalog = async (entities, needs, currentUser) => {
             const wherePlatform = {};
 
             if (company) whereCompany.id = company.id;
-            if (entities.campaign_name) whereReport.nombre = { [Op.iLike]: `%${entities.campaign_name}%` };
+            if (entities.campaign_name) {
+                // "campaign_name" en la pregunta del usuario puede referirse tanto
+                // al nombre del reporte/anuncio (reportes.nombre) como al nombre
+                // de la campaña real que lo agrupa (campanas.nombre) - para el
+                // usuario ambos son "la campaña", así que se busca en los dos.
+                const pattern = buildFuzzyNamePattern(entities.campaign_name);
+                whereReport[Op.or] = [
+                    { nombre: { [Op.iLike]: pattern } },
+                    { '$campana.nombre$': { [Op.iLike]: pattern } }
+                ];
+            }
             if (entities.platform) wherePlatform.plataforma = { [Op.iLike]: `%${entities.platform}%` };
             if (entities.year) {
                 whereReport.fecha_ini = {

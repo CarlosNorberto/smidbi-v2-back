@@ -1,6 +1,7 @@
-const openai = require('./openai.service');
+const { getOpenAIClient } = require('./openai.service');
 
 const generateResponse = async (question, data, fromSelection = false) => {
+    const openai = await getOpenAIClient();
 
     const isOutOfScope = Object.values(data).some(d => d?.out_of_scope === true);
 
@@ -65,16 +66,21 @@ const generateResponse = async (question, data, fromSelection = false) => {
                         - 7 días o menos: puedes listarlos.
 
                     4. TÉRMINOS TÉCNICOS:
-                        - NUNCA menciones nombres de campos como: days_remaining, kpi_progress, 
-                            time_progress, gap, out_of_scope, campaign_id, company_id
+                        - NUNCA menciones nombres de campos como: days_remaining, kpi_progress,
+                            time_progress, gap, out_of_scope, campaign_id, company_id, link_to_report
                         - Tradúcelos a lenguaje natural:
                             days_remaining → "días restantes"
                             vence_hoy: true → "vence hoy"
                             status: "behind" → "está por debajo de su meta"
                             status: "on_track" → "va bien"
                             status: "at_risk" → "está en riesgo"
-                    
-                    5. CAMPAÑAS POR VENCER:
+
+                    5. ENLACE AL REPORTE:
+                        Si los datos incluyen "link_to_report", NO lo escribas ni lo menciones tú.
+                        El sistema ya agrega automáticamente un enlace para abrirlo al final de tu
+                        respuesta, así que ignora ese campo por completo.
+
+                    6. CAMPAÑAS POR VENCER:
                         Cuando respondas sobre campañas por vencer:
                         - SIEMPRE muestra el listado agrupado por empresa
                         - Formato por empresa:
@@ -85,7 +91,7 @@ const generateResponse = async (question, data, fromSelection = false) => {
                         - NO omitas ninguna empresa del listado
 
                     ${fromSelection
-                    && `6. SELECCIÓN DE CAMPAÑA:
+                    && `7. SELECCIÓN DE CAMPAÑA:
                             El usuario seleccionó esta campaña de una lista de opciones.
                             Responde directamente con los datos de la campaña.
                             NUNCA menciones si el nombre coincide o no con la búsqueda original.
@@ -106,9 +112,9 @@ const generateResponse = async (question, data, fromSelection = false) => {
 
     let aiResponse = response.choices[0].message.content;
 
-    // if (linkToReport) {
-    //     aiResponse += `\n\nPuedes ver el reporte completo aquí: ${linkToReport}`;
-    // }
+    if (linkToReport) {
+        aiResponse += `\n\n[Abrir / editar este reporte](${linkToReport})`;
+    }
 
     return aiResponse;
 }
