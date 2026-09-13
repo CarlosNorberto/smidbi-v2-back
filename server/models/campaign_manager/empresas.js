@@ -87,6 +87,11 @@ module.exports = (sequelize, DataTypes) => {
         time_zone: {
             type: DataTypes.STRING,
             allowNull: true
+        },
+        access_token: {
+            type: DataTypes.STRING(64),
+            allowNull: true,
+            unique: true
         }
     }, {
         tableName: 'empresas',

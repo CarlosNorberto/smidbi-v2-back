@@ -1,4 +1,4 @@
-const { sessionAuth, requireRole, internalOrClientSessionAuth } = require('../../auth/middleware');
+const { sessionAuth, requireRole, internalOrClientSessionAuth, clientSessionAuth } = require('../../auth/middleware');
 const empresas = require('../../controllers/campaign_manager/empresas');
 const categorias = require('../../controllers/campaign_manager/categorias');
 const campanas = require('../../controllers/campaign_manager/campanas');
@@ -32,6 +32,8 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/companies/users', sessionAuth, empresas.getAllByUsers);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
+    app.post(process.env.PREFIX_API + '/companies/:id/access_token/generate', sessionAuth, empresas.generateAccessToken);
+    app.delete(process.env.PREFIX_API + '/companies/:id/access_token', sessionAuth, empresas.revokeAccessToken);
 
     // CATEGORIAS
     app.get(process.env.PREFIX_API + '/categories/one/:id', sessionAuth, categorias.getById);
@@ -45,6 +47,8 @@ module.exports = (app) => {
     app.post(process.env.PREFIX_API + '/campaigns/copy', sessionAuth, campanas.copyCampaignAndReports);
     app.post(process.env.PREFIX_API + '/campaigns/create', sessionAuth, campanas.create);
     app.put(process.env.PREFIX_API + '/campaigns/update/:id', sessionAuth, campanas.update);
+    // Menú del cliente ("Sus campañas"): sesión de cliente, scoped a su propia empresa.
+    app.get(process.env.PREFIX_API + '/client_menu/campaigns', clientSessionAuth, campanas.getAllForClientMenu);
 
     // REPORTES
     app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);

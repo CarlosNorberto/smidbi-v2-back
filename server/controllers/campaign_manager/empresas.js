@@ -1,5 +1,6 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
+const crypto = require('crypto');
 
 // Seguridad mínima para la contraseña de acceso de cliente: no ultra estricta,
 // pero ya no libre como estaba. Mín. 8 caracteres, al menos una letra y un número.
@@ -88,6 +89,9 @@ const getAllByUsers = async (req, res) => {
             attributes: [
                 'id', 'nombre', 'activo', 'descripcion', 'email', 'usuario', 'time_zone',
                 [md.Sequelize.literal(`("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`), 'has_password'],
+                // No se devuelve el token en sí en el listado (solo si existe uno):
+                // el valor completo solo se entrega una vez, justo al generarlo.
+                [md.Sequelize.literal(`("empresas"."access_token" IS NOT NULL)`), 'has_access_token'],
             ],
             limit,
             offset,
@@ -206,10 +210,46 @@ const update = async (req, res) => {
     }
 };
 
+// Link de acceso sin contraseña: genera un token aleatorio (no un id
+// codificado ni reutiliza `code`, que ya usa la app vieja para el embed de
+// Looker Studio) y lo guarda en `access_token`. Cualquiera con el link puede
+// entrar como esa empresa — lo sabe el usuario, lo pidió así. Regenerar
+// invalida el link anterior al instante (se sobreescribe el token).
+const generateAccessToken = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const empresa = await md.empresas.findByPk(id);
+        if (!empresa) {
+            return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+        const access_token = crypto.randomBytes(32).toString('hex');
+        await empresa.update({ access_token });
+        res.status(200).json({ access_token });
+    } catch (error) {
+        res.status(500).json({ message: `Error al generar el link de acceso: ${error.message}` });
+    }
+};
+
+const revokeAccessToken = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const empresa = await md.empresas.findByPk(id);
+        if (!empresa) {
+            return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+        await empresa.update({ access_token: null });
+        res.status(200).json({ message: 'Link de acceso revocado correctamente' });
+    } catch (error) {
+        res.status(500).json({ message: `Error al revocar el link de acceso: ${error.message}` });
+    }
+};
+
 module.exports = {
     getById,
     getAll,
     getAllByUsers,
     create,
     update,
+    generateAccessToken,
+    revokeAccessToken,
 };

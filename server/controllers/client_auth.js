@@ -33,6 +33,29 @@ const login = async (req, res) => {
     }
 };
 
+// Login sin usuario/contraseña vía link de acceso (generado desde
+// Empresas en el admin). Quien tenga el link entra directo como esa
+// empresa — mismo criterio de sesión que el login normal.
+const loginByToken = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const empresa = await md.empresas.findOne({
+            where: { access_token: token, activo: true },
+            attributes: ['id', 'nombre', 'usuario', 'email'],
+        });
+
+        if (!empresa) {
+            return res.status(404).json({ message: 'Este link no es válido o ya no está disponible.' });
+        }
+
+        req.session.empresaId = empresa.id;
+        req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días, igual que "recordar sesión"
+        res.status(200).json(empresa);
+    } catch (error) {
+        res.status(500).json({ message: `Error al iniciar sesión: ${error.message}` });
+    }
+};
+
 const logout = (req, res) => {
     req.session.empresaId = null;
     res.status(200).json({ message: 'Sesión cerrada correctamente' });
@@ -54,6 +77,7 @@ const me = async (req, res) => {
 
 module.exports = {
     login,
+    loginByToken,
     logout,
     me,
 };

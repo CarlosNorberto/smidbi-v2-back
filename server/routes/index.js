@@ -35,6 +35,7 @@ module.exports = (app) => {
 
     // AUTH DE CLIENTES (empresas) - independiente del login de usuarios internos
     app.post(process.env.PREFIX_API + '/auth/client/login', clientAuth.login);
+    app.get(process.env.PREFIX_API + '/auth/client/token/:token', clientAuth.loginByToken);
     app.post(process.env.PREFIX_API + '/auth/client/logout', clientAuth.logout);
     app.get(process.env.PREFIX_API + '/auth/client/me', clientSessionAuth, clientAuth.me);
 

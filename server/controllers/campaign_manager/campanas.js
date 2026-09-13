@@ -50,6 +50,31 @@ const getByCategory = async (req, res) => {
     }
 };
 
+// Menú del cliente ("Sus campañas"): todas las campañas activas de la empresa
+// logueada (vía sesión de cliente), con su categoría. El año/mes se agrupa en
+// el frontend a partir de `mes`/`gestion` (mismos campos que ya usa el admin al
+// crear/editar una campaña, no hace falta parsear el nombre de la categoría).
+const getAllForClientMenu = async (req, res) => {
+    try {
+        const empresaId = req.session.empresaId;
+        const campanas = await md.campanas.findAll({
+            where: { activo: true },
+            attributes: ['id', 'nombre', 'mes', 'gestion'],
+            include: [{
+                model: md.categorias,
+                as: 'categoria',
+                attributes: ['id', 'nombre'],
+                where: { id_empresa: empresaId, activo: true },
+                required: true,
+            }],
+            order: [['gestion', 'DESC'], ['fecha_creacion', 'DESC']],
+        });
+        res.status(200).json(campanas);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener las campañas: ${error.message}` });
+    }
+};
+
 // *********************************************//
 // **** COPIAR CAMPAÑA (y todos sus reportes) ***//
 // *********************************************//
@@ -188,6 +213,7 @@ const update = async (req, res) => {
 module.exports = {
     getById,
     getByCategory,
+    getAllForClientMenu,
     copyCampaignAndReports,
     create,
     update,
