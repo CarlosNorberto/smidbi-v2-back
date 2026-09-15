@@ -82,7 +82,7 @@ const getActiveCampaigns = async ({ company_id, include_inactive = false, curren
                     fecha_ini: r.fecha_ini,
                     fecha_fin: r.fecha_fin,
                     days_remaining: daysRemaining,
-                    link_to_report: `https://v2.smidbi.site/admin/${r.campana.categoria.empresa.id}/${r.campana.categoria.id}/${r.campana.id}/${r.id}/report/edit`
+                    link_to_report: `${process.env.FRONT_URL}/admin/${r.campana.categoria.empresa.id}/${r.campana.categoria.id}/${r.campana.id}/${r.id}/report/edit`
                 };
             })
         };

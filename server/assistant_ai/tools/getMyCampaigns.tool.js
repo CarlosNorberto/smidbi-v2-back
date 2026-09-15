@@ -116,7 +116,7 @@ const getMyCampaigns = async ({ currentUser }) => {
                     executed: parseFloat(reporte.ejecutado) || 0
                 },
                 status: daysRemaining <= 1 ? 'vence hoy' : `vence en ${daysRemaining} días`,
-                link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+                link_to_report: `${process.env.FRONT_URL}/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
             };
         }));
 

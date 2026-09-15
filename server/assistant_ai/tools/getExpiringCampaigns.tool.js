@@ -95,7 +95,7 @@ const getExpiringCampaigns = async ({ days_ahead = 7, include_inactive = false, 
                 fecha_fin: r.fecha_fin,
                 status: daysRemaining <= 1 ? 'vence hoy' :
                     `vence en ${daysRemaining} días`,
-                link_to_report: `https://v2.smidbi.site/admin/${r.campana.categoria.empresa.id}/${r.campana.categoria.id}/${r.campana.id}/${r.id}/report/edit`
+                link_to_report: `${process.env.FRONT_URL}/admin/${r.campana.categoria.empresa.id}/${r.campana.categoria.id}/${r.campana.id}/${r.id}/report/edit`
             });
         });
 

@@ -134,7 +134,7 @@ const getProjection = async ({campaign_id, include_inactive = false, currentUser
             probability,
             // Alerta si el presupuesto va más rápido que el KPI
             budget_alert: parseFloat(budgetProgress) > parseFloat(goalProgress) + 15,
-            link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+            link_to_report: `${process.env.FRONT_URL}/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
         };
 
     } catch (error) {

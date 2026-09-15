@@ -113,7 +113,7 @@ const getClientSummary = async ({ company_id, include_inactive = false, currentU
           executed: parseFloat(reporte.ejecutado)   || 0
         },
         days_remaining: daysRemaining,
-        link_to_report: `https://v2.smidbi.site/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
+        link_to_report: `${process.env.FRONT_URL}/admin/${reporte.campana.categoria.empresa.id}/${reporte.campana.categoria.id}/${reporte.campana.id}/${reporte.id}/report/edit`
       };
     }));
 
