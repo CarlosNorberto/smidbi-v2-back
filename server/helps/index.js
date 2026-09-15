@@ -54,7 +54,10 @@ const getProgresoPresupuesto = async (objetivoLogrado, reporte) => {
             resultado = (objetivoLogrado / 1000) * cp;
         }
     } else {
-        const percent = await percentDias(reporte);
+        // percentDias necesita id_objetivo para filtrar los días inactivos de
+        // ESE objetivo (ver su propia firma) — sin este segundo argumento
+        // rompe con un error SQL apenas un reporte no tiene `cp` (queda en 0).
+        const percent = await percentDias(reporte, idObjetivo);
         resultado = (Math.trunc(percent) * presupuesto) / 100;
     }
 

@@ -32,6 +32,7 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/companies/users', sessionAuth, empresas.getAllByUsers);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
+    app.get(process.env.PREFIX_API + '/companies/:id/access_token', sessionAuth, empresas.getAccessToken);
     app.post(process.env.PREFIX_API + '/companies/:id/access_token/generate', sessionAuth, empresas.generateAccessToken);
     app.delete(process.env.PREFIX_API + '/companies/:id/access_token', sessionAuth, empresas.revokeAccessToken);
 
@@ -49,6 +50,7 @@ module.exports = (app) => {
     app.put(process.env.PREFIX_API + '/campaigns/update/:id', sessionAuth, campanas.update);
     // Menú del cliente ("Sus campañas"): sesión de cliente, scoped a su propia empresa.
     app.get(process.env.PREFIX_API + '/client_menu/campaigns', clientSessionAuth, campanas.getAllForClientMenu);
+    app.get(process.env.PREFIX_API + '/client_menu/summary', clientSessionAuth, reportes.getSummaryForClientMenu);
 
     // REPORTES
     app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);

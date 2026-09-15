@@ -21,6 +21,10 @@ const login = async (req, res) => {
         }
 
         req.session.empresaId = empresa.id;
+        // Login normal: por si la sesión traía un `accessTokenUsed` de un login
+        // por link anterior (mismo navegador, sin logout de por medio) — este
+        // login no depende de ningún token, así que no debe seguir atado a uno.
+        req.session.accessTokenUsed = null;
         if (remember) {
             req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días
         } else {
@@ -49,6 +53,11 @@ const loginByToken = async (req, res) => {
         }
 
         req.session.empresaId = empresa.id;
+        // Se guarda el token usado para este login: así, si luego se revoca o
+        // se regenera desde el admin, `clientSessionAuth` puede detectar que
+        // YA NO coincide con el vigente y cortar también la sesión abierta
+        // (no solo bloquear logins nuevos con el link viejo).
+        req.session.accessTokenUsed = token;
         req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000; // 30 días, igual que "recordar sesión"
         res.status(200).json(empresa);
     } catch (error) {
@@ -58,6 +67,7 @@ const loginByToken = async (req, res) => {
 
 const logout = (req, res) => {
     req.session.empresaId = null;
+    req.session.accessTokenUsed = null;
     res.status(200).json({ message: 'Sesión cerrada correctamente' });
 };
 

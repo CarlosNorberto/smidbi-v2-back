@@ -30,11 +30,28 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
     res.status(403).send({ message: 'Acceso denegado. No tiene permisos suficientes.' });
 }
 
+// Sesiones iniciadas con el link de acceso (`/auth/client/token/:token`)
+// guardan qué token usaron (`req.session.accessTokenUsed`, ver
+// client_auth.js). Si ese token ya no es el vigente de la empresa —se
+// revocó o se generó uno nuevo, que invalida el anterior— la sesión abierta
+// queda cortada acá aunque el usuario nunca haya cerrado sesión. Los logins
+// normales por usuario/contraseña nunca setean ese campo, así que no los
+// afecta esta verificación.
+const empresaSesionSigueValida = (empresa, req) => {
+    if (!empresa) return false;
+    if (req.session.accessTokenUsed && empresa.access_token !== req.session.accessTokenUsed) {
+        return false;
+    }
+    return true;
+};
+
 /**
  * Middleware de sesión para clientes (empresas), independiente de passport/usuarios.
  * Debe usarse después de que /auth/client/login haya seteado req.session.empresaId.
- * Revalida en cada request que la empresa siga activa: si se desactivó después
- * del login, la sesión existente deja de servir (no solo el login nuevo).
+ * Revalida en cada request que la empresa siga activa y, si el login fue por
+ * link, que ese link siga siendo el vigente — si se desactivó la empresa o se
+ * revocó/regeneró el link después del login, la sesión existente deja de
+ * servir (no solo el login nuevo).
  * @param {object} req - Request
  * @param {object} res - Response
  * @param {function} next - Next
@@ -47,10 +64,11 @@ const clientSessionAuth = async (req, res, next) => {
     try {
         const empresa = await md.empresas.findOne({
             where: { id: req.session.empresaId, activo: true },
-            attributes: ['id'],
+            attributes: ['id', 'access_token'],
         });
-        if (!empresa) {
+        if (!empresaSesionSigueValida(empresa, req)) {
             req.session.empresaId = null;
+            req.session.accessTokenUsed = null;
             return res.status(403).send({ message: "Acceso denegado. Por favor inicie sesión" });
         }
         return next();
@@ -77,12 +95,13 @@ const internalOrClientSessionAuth = async (req, res, next) => {
         try {
             const empresa = await md.empresas.findOne({
                 where: { id: req.session.empresaId, activo: true },
-                attributes: ['id'],
+                attributes: ['id', 'access_token'],
             });
-            if (empresa) {
+            if (empresaSesionSigueValida(empresa, req)) {
                 return next();
             }
             req.session.empresaId = null;
+            req.session.accessTokenUsed = null;
         } catch (error) {
             return res.status(500).send({ message: `Error al validar la sesión: ${error.message}` });
         }

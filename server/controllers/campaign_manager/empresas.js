@@ -89,8 +89,9 @@ const getAllByUsers = async (req, res) => {
             attributes: [
                 'id', 'nombre', 'activo', 'descripcion', 'email', 'usuario', 'time_zone',
                 [md.Sequelize.literal(`("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`), 'has_password'],
-                // No se devuelve el token en sí en el listado (solo si existe uno):
-                // el valor completo solo se entrega una vez, justo al generarlo.
+                // El listado no devuelve el token en sí, solo si existe uno: el valor
+                // completo se pide aparte (getAccessToken) recién cuando el admin abre
+                // el detalle de esa empresa puntual, no en cada fila de la tabla.
                 [md.Sequelize.literal(`("empresas"."access_token" IS NOT NULL)`), 'has_access_token'],
             ],
             limit,
@@ -230,6 +231,23 @@ const generateAccessToken = async (req, res) => {
     }
 };
 
+// El token queda guardado en texto plano en `access_token` (se compara tal
+// cual en el login por link), así que no hay problema en devolverlo de
+// nuevo para esta misma empresa — evita forzar una regeneración solo para
+// volver a ver un link que ya se había generado antes.
+const getAccessToken = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const empresa = await md.empresas.findByPk(id, { attributes: ['id', 'access_token'] });
+        if (!empresa) {
+            return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+        res.status(200).json({ access_token: empresa.access_token });
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener el link de acceso: ${error.message}` });
+    }
+};
+
 const revokeAccessToken = async (req, res) => {
     try {
         const { id } = req.params;
@@ -251,5 +269,6 @@ module.exports = {
     create,
     update,
     generateAccessToken,
+    getAccessToken,
     revokeAccessToken,
 };
