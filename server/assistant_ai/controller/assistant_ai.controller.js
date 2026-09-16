@@ -56,6 +56,16 @@ async function handleChat(req, res) {
         }
 
         if (catalog.not_found) {
+            // Mensaje fijo (no pasa por OpenAI) cuando la empresa existe pero no
+            // está entre las asignadas a este usuario restringido (rol 'user')
+            // — claro y breve, sin arriesgar que el LLM redacte algo que insinúe
+            // si la empresa existe o no.
+            if (catalog.restricted) {
+                return res.json({
+                    type: 'not_found',
+                    message: 'Esa empresa no está entre tus campañas asignadas. Solo puedo mostrarte información de las campañas que tienes a cargo.'
+                });
+            }
             const message = await generateNotFound({
                 question,
                 entities,

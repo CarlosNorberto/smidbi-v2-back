@@ -1,6 +1,29 @@
 const { Op } = require('sequelize');
 const md = require('../../models');
-const { getUserFilter } = require('../helps/helps');
+const { getUserFilter, isUnrestrictedRole } = require('../helps/helps');
+
+// Empresas donde el usuario (rol 'user') tiene al menos un reporte asignado.
+// Sin esto, la búsqueda de empresa por nombre (más abajo) es global: un rol
+// restringido podría ver, en una lista de desambiguación, el nombre de
+// empresas que no le corresponden (aunque después la consulta de reportes sí
+// filtre por `id_usuario` y no le devuelva datos). Se usa solo para 'user' —
+// admin/superadmin siguen viendo todas.
+const getAccessibleCompanyIds = async (currentUser) => {
+    const empresas = await md.empresas.findAll({
+        attributes: ['id'],
+        include: [{
+            model: md.categorias, as: 'categorias', required: true, attributes: [],
+            include: [{
+                model: md.campanas, as: 'campanas', required: true, attributes: [],
+                include: [{
+                    model: md.reportes, as: 'reportes', required: true, attributes: [],
+                    where: { id_usuario: currentUser.id },
+                }],
+            }],
+        }],
+    });
+    return new Set(empresas.map((e) => e.id));
+};
 
 function formatDate(date) {
     if (!date) return 'N/A';
@@ -23,7 +46,7 @@ const getCatalog = async (entities, needs, currentUser) => {
         let company = null;
 
         if (needs.includes('company') && entities.company_name) {
-            const companies = await md.empresas.findAll({
+            let companies = await md.empresas.findAll({
                 where: {
                     activo: true,
                     nombre: { [Op.iLike]: buildFuzzyNamePattern(entities.company_name) }
@@ -31,7 +54,28 @@ const getCatalog = async (entities, needs, currentUser) => {
                 attributes: ['id', 'nombre']
             });
 
+            // Para rol 'user' (restringido), se filtra a solo las empresas donde
+            // tiene algún reporte asignado — así una lista de desambiguación
+            // nunca revela el nombre de una empresa que no le corresponde.
+            let restrictedMiss = false;
+            if (companies.length > 0 && !isUnrestrictedRole(currentUser)) {
+                const accessibleIds = await getAccessibleCompanyIds(currentUser);
+                const filtered = companies.filter((c) => accessibleIds.has(c.id));
+                restrictedMiss = filtered.length === 0;
+                companies = filtered;
+            }
+
             if (companies.length === 0) {
+                if (restrictedMiss) {
+                    return {
+                        ambiguous: false,
+                        company: null,
+                        campaigns: [],
+                        not_found: true,
+                        not_found_type: 'company',
+                        restricted: true
+                    };
+                }
                 if (needs.includes('campaign')) {
                     // El extractor de entidades a veces separa mal el nombre de una
                     // campaña en dos campos cuando contiene alguna palabra que
