@@ -1334,124 +1334,134 @@ const getSecundarioValor = (reporte, idObjetivo) => {
     return Number(secundario?.valor) || 0;
 };
 
+// Extraída aparte de getSummaryForClientMenu (que la llama para responder el
+// HTTP request) porque el asistente IA del cliente (server/assistant_ai/
+// controller/client_assistant_ai.controller.js) también la necesita: le da
+// exactamente los mismos datos ya escoped a `empresaId`, así que la IA nunca
+// tiene forma de ver campañas de otra empresa (no es una regla de prompt,
+// es que el dato de otras empresas ni siquiera llega a construirse).
+const getClientSummaryRows = async (empresaId) => {
+    const fechaActual = getFechaActualLaPaz();
+
+    const campanas = await md.campanas.findAll({
+        where: {
+            activo: true,
+            // Las campañas "servicio" (branding/diseño, sin métricas de medios) no
+            // entran al Resumen — mismo filtro que usaba report_by_client.
+            servicio: { [Op.not]: true },
+        },
+        attributes: ['id', 'nombre', 'mes', 'gestion', 'moneda'],
+        include: [
+            {
+                model: md.categorias,
+                as: 'categoria',
+                attributes: ['id', 'nombre'],
+                where: { id_empresa: empresaId, activo: true },
+                required: true,
+            },
+            {
+                model: md.reportes,
+                as: 'reportes',
+                where: {
+                    activo: true,
+                    presupuesto: { [Op.ne]: null },
+                    fecha_ini: { [Op.ne]: null },
+                },
+                required: false,
+                attributes: [
+                    'id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto',
+                    'objetivo_proyectado', 'id_objetivo', 'cp', 'ctr', 'conversiones',
+                ],
+                include: [
+                    { model: md.plataformas, as: 'plataforma', attributes: ['id', 'plataforma'] },
+                    { model: md.objetivos, as: 'objetivo', attributes: ['id', 'objetivo'] },
+                    {
+                        model: md.reporte_objetivos_secundarios,
+                        as: 'objetivos_secundarios',
+                        attributes: ['id_objetivo', 'valor'],
+                    },
+                ],
+            },
+        ],
+        order: [['gestion', 'DESC'], ['fecha_creacion', 'DESC']],
+    });
+
+    const filas = [];
+    for (const campanaInstance of campanas) {
+        const campana = campanaInstance.toJSON();
+        for (const reporte of campana.reportes) {
+            const objetivoLogrado = Number(await getObjetivoLogrado(reporte.id, reporte.id_objetivo)) || 0;
+            const progreso = await getProgresoPresupuesto(objetivoLogrado, reporte);
+            const presupuestoGastado = progreso.monto;
+            const presupuestoTotal = Number(reporte.presupuesto) || 0;
+
+            // Sin cap en 100 (a diferencia del `porcentaje_presupuesto` que usa el
+            // dashboard para su barra de progreso): acá interesa mostrar si hubo
+            // sobre-ejecución de presupuesto, igual que la tabla vieja.
+            const cumplimiento = presupuestoTotal > 0
+                ? Math.round((presupuestoGastado / presupuestoTotal) * 100)
+                : 0;
+
+            const objetivoProyectado = Number(reporte.objetivo_proyectado) || 0;
+            const efectividad = objetivoProyectado > 0
+                ? Math.round((objetivoLogrado / objetivoProyectado) * 100)
+                : 0;
+
+            const impresiones = reporte.id_objetivo === OBJETIVO_IMPRESIONES_ID
+                ? objetivoLogrado
+                : getSecundarioValor(reporte, OBJETIVO_IMPRESIONES_ID);
+            const alcance = getSecundarioValor(reporte, OBJETIVO_ALCANCE_ID);
+
+            const cp = Number(reporte.cp) || 0;
+            const costo = cp > 0
+                ? cp
+                : (objetivoLogrado > 0 ? Math.round((presupuestoTotal / objetivoLogrado) * 100) / 100 : 0);
+
+            const conversiones = Number(reporte.conversiones) || 0;
+            let cpa = 0;
+            if (conversiones > 0) {
+                const fechaIni = parseToDate(reporte.fecha_ini);
+                const fechaFin = parseToDate(reporte.fecha_fin);
+                const reporteActivo = fechaIni && fechaFin && fechaActual >= fechaIni && fechaActual <= fechaFin;
+                cpa = Math.round(((reporteActivo ? presupuestoGastado : presupuestoTotal) / conversiones) * 100) / 100;
+            }
+
+            filas.push({
+                reporte_id: reporte.id,
+                formato: reporte.nombre,
+                campana_id: campana.id,
+                campana_nombre: campana.nombre,
+                mes: campana.mes,
+                gestion: campana.gestion,
+                categoria_id: campana.categoria.id,
+                categoria_nombre: campana.categoria.nombre,
+                fecha_ini: reporte.fecha_ini,
+                fecha_fin: reporte.fecha_fin,
+                plataforma: reporte.plataforma?.plataforma || null,
+                moneda: campana.moneda,
+                presupuesto_total: presupuestoTotal,
+                presupuesto_gastado: presupuestoGastado,
+                cumplimiento,
+                impresiones,
+                alcance,
+                objetivo_logrado: objetivoLogrado,
+                objetivo_proyectado: objetivoProyectado,
+                tipo_objetivo: reporte.objetivo?.objetivo || null,
+                efectividad,
+                ctr: Number(reporte.ctr) || 0,
+                costo,
+                conversiones,
+                cpa,
+            });
+        }
+    }
+
+    return filas;
+};
+
 const getSummaryForClientMenu = async (req, res) => {
     try {
-        const empresaId = req.session.empresaId;
-        const fechaActual = getFechaActualLaPaz();
-
-        const campanas = await md.campanas.findAll({
-            where: {
-                activo: true,
-                // Las campañas "servicio" (branding/diseño, sin métricas de medios) no
-                // entran al Resumen — mismo filtro que usaba report_by_client.
-                servicio: { [Op.not]: true },
-            },
-            attributes: ['id', 'nombre', 'mes', 'gestion', 'moneda'],
-            include: [
-                {
-                    model: md.categorias,
-                    as: 'categoria',
-                    attributes: ['id', 'nombre'],
-                    where: { id_empresa: empresaId, activo: true },
-                    required: true,
-                },
-                {
-                    model: md.reportes,
-                    as: 'reportes',
-                    where: {
-                        activo: true,
-                        presupuesto: { [Op.ne]: null },
-                        fecha_ini: { [Op.ne]: null },
-                    },
-                    required: false,
-                    attributes: [
-                        'id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto',
-                        'objetivo_proyectado', 'id_objetivo', 'cp', 'ctr', 'conversiones',
-                    ],
-                    include: [
-                        { model: md.plataformas, as: 'plataforma', attributes: ['id', 'plataforma'] },
-                        { model: md.objetivos, as: 'objetivo', attributes: ['id', 'objetivo'] },
-                        {
-                            model: md.reporte_objetivos_secundarios,
-                            as: 'objetivos_secundarios',
-                            attributes: ['id_objetivo', 'valor'],
-                        },
-                    ],
-                },
-            ],
-            order: [['gestion', 'DESC'], ['fecha_creacion', 'DESC']],
-        });
-
-        const filas = [];
-        for (const campanaInstance of campanas) {
-            const campana = campanaInstance.toJSON();
-            for (const reporte of campana.reportes) {
-                const objetivoLogrado = Number(await getObjetivoLogrado(reporte.id, reporte.id_objetivo)) || 0;
-                const progreso = await getProgresoPresupuesto(objetivoLogrado, reporte);
-                const presupuestoGastado = progreso.monto;
-                const presupuestoTotal = Number(reporte.presupuesto) || 0;
-
-                // Sin cap en 100 (a diferencia del `porcentaje_presupuesto` que usa el
-                // dashboard para su barra de progreso): acá interesa mostrar si hubo
-                // sobre-ejecución de presupuesto, igual que la tabla vieja.
-                const cumplimiento = presupuestoTotal > 0
-                    ? Math.round((presupuestoGastado / presupuestoTotal) * 100)
-                    : 0;
-
-                const objetivoProyectado = Number(reporte.objetivo_proyectado) || 0;
-                const efectividad = objetivoProyectado > 0
-                    ? Math.round((objetivoLogrado / objetivoProyectado) * 100)
-                    : 0;
-
-                const impresiones = reporte.id_objetivo === OBJETIVO_IMPRESIONES_ID
-                    ? objetivoLogrado
-                    : getSecundarioValor(reporte, OBJETIVO_IMPRESIONES_ID);
-                const alcance = getSecundarioValor(reporte, OBJETIVO_ALCANCE_ID);
-
-                const cp = Number(reporte.cp) || 0;
-                const costo = cp > 0
-                    ? cp
-                    : (objetivoLogrado > 0 ? Math.round((presupuestoTotal / objetivoLogrado) * 100) / 100 : 0);
-
-                const conversiones = Number(reporte.conversiones) || 0;
-                let cpa = 0;
-                if (conversiones > 0) {
-                    const fechaIni = parseToDate(reporte.fecha_ini);
-                    const fechaFin = parseToDate(reporte.fecha_fin);
-                    const reporteActivo = fechaIni && fechaFin && fechaActual >= fechaIni && fechaActual <= fechaFin;
-                    cpa = Math.round(((reporteActivo ? presupuestoGastado : presupuestoTotal) / conversiones) * 100) / 100;
-                }
-
-                filas.push({
-                    reporte_id: reporte.id,
-                    formato: reporte.nombre,
-                    campana_id: campana.id,
-                    campana_nombre: campana.nombre,
-                    mes: campana.mes,
-                    gestion: campana.gestion,
-                    categoria_id: campana.categoria.id,
-                    categoria_nombre: campana.categoria.nombre,
-                    fecha_ini: reporte.fecha_ini,
-                    fecha_fin: reporte.fecha_fin,
-                    plataforma: reporte.plataforma?.plataforma || null,
-                    moneda: campana.moneda,
-                    presupuesto_total: presupuestoTotal,
-                    presupuesto_gastado: presupuestoGastado,
-                    cumplimiento,
-                    impresiones,
-                    alcance,
-                    objetivo_logrado: objetivoLogrado,
-                    objetivo_proyectado: objetivoProyectado,
-                    tipo_objetivo: reporte.objetivo?.objetivo || null,
-                    efectividad,
-                    ctr: Number(reporte.ctr) || 0,
-                    costo,
-                    conversiones,
-                    cpa,
-                });
-            }
-        }
-
+        const filas = await getClientSummaryRows(req.session.empresaId);
         res.status(200).json(filas);
     } catch (error) {
         res.status(500).json({ message: `Error al obtener el resumen: ${error.message}` });
@@ -1672,6 +1682,7 @@ module.exports = {
     reporteDiasReview,
     getDashboardData,
     getSummaryForClientMenu,
+    getClientSummaryRows,
     copyReport,
     copyReportWithChildren,
 };
