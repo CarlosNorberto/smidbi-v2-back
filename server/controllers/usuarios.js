@@ -12,11 +12,18 @@ const getAll = async (req, res) => {
         if (active !== undefined) {
             where.activo = active === 'true';
         }
-        const usuarios = await md.usuarios.scope('withRole').findAll({
+        let usuarios = await md.usuarios.scope('withRole').findAll({
             where: where,
             attributes: usuarioAttributes,
             order: [['nombre', 'ASC']],
-        });        
+        });
+
+        // El rol 'hidden' no debe aparecer en el listado de usuarios salvo
+        // para quien esté viendo con role=superadmin.
+        if (req.user.role?.rol !== 'superadmin') {
+            usuarios = usuarios.filter((u) => u.role?.rol !== 'hidden');
+        }
+
         res.status(200).json(usuarios);
     } catch (error) {
         res.status(500).json({ message: `Error al obtener los usuarios: ${error.message}` });
