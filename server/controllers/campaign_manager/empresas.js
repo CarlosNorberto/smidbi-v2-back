@@ -10,7 +10,8 @@ const isPasswordSecure = (password) =>
     /[a-zA-Z]/.test(password) &&
     /[0-9]/.test(password);
 
-const PASSWORD_RULE_MESSAGE = 'La contraseña debe tener al menos 8 caracteres, incluyendo al menos una letra y un número.';
+const PASSWORD_RULE_MESSAGE =
+    'La contraseña debe tener al menos 8 caracteres, incluyendo al menos una letra y un número.';
 
 const checkUsuarioDisponible = async (usuario, excludeId = null) => {
     const where = { usuario };
@@ -25,11 +26,21 @@ const getById = async (req, res) => {
         const empresa = await md.empresas.findOne({
             where: {
                 id: id,
-                activo: true
+                activo: true,
             },
             attributes: [
-                'id', 'nombre', 'descripcion', 'email', 'usuario', 'time_zone',
-                [md.Sequelize.literal(`("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`), 'has_password'],
+                'id',
+                'nombre',
+                'descripcion',
+                'email',
+                'usuario',
+                'time_zone',
+                [
+                    md.Sequelize.literal(
+                        `("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`,
+                    ),
+                    'has_password',
+                ],
             ],
         });
         if (!empresa) {
@@ -37,7 +48,9 @@ const getById = async (req, res) => {
         }
         res.status(200).json(empresa);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener la empresa: ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener la empresa: ${error.message}`,
+        });
     }
 };
 
@@ -47,26 +60,45 @@ const getAll = async (req, res) => {
         let where = { activo: activo };
         if (name) {
             where.nombre = {
-                [md.Sequelize.Op.iLike]: `%${name}%`
+                [md.Sequelize.Op.iLike]: `%${name}%`,
             };
         }
         const empresas = await md.empresas.findAll({
             where: where,
             attributes: [
-                'id', 'nombre', 'descripcion', 'email', 'usuario', 'time_zone',
-                [md.Sequelize.literal(`("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`), 'has_password'],
+                'id',
+                'nombre',
+                'descripcion',
+                'email',
+                'usuario',
+                'time_zone',
+                [
+                    md.Sequelize.literal(
+                        `("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`,
+                    ),
+                    'has_password',
+                ],
             ],
             order: [['fecha_creacion', 'DESC']],
         });
         res.status(200).json(empresas);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener las empresas: ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener las empresas: ${error.message}`,
+        });
     }
 };
 
 const getAllByUsers = async (req, res) => {
     try {
-        const { user_ids, page = 1, limit = 10, name = null, company_id = null, active = true } = req.query;
+        const {
+            user_ids,
+            page = 1,
+            limit = 10,
+            name = null,
+            company_id = null,
+            active = true,
+        } = req.query;
         const offset = (page - 1) * limit;
 
         // 'user' es un rol restringido: solo puede ver las empresas de las que
@@ -75,7 +107,9 @@ const getAllByUsers = async (req, res) => {
         // decide acá con el usuario de la sesión — nunca se confía en el
         // `user_ids` que mande el cliente para decidir si restringe o no,
         // solo se usa (si viene) para que admin/superadmin acoten la vista.
-        const isUnrestricted = req.user.role?.rol === 'admin' || req.user.role?.rol === 'superadmin';
+        const isUnrestricted =
+            req.user.role?.rol === 'admin' ||
+            req.user.role?.rol === 'superadmin';
 
         let where = company_id ? { id: company_id } : { activo: active };
         if (!isUnrestricted) {
@@ -85,18 +119,34 @@ const getAllByUsers = async (req, res) => {
         }
         if (!company_id && name) {
             where.nombre = {
-                [md.Sequelize.Op.iLike]: `%${name}%`
+                [md.Sequelize.Op.iLike]: `%${name}%`,
             };
         }
         const empresas = await md.empresas.scope('withUser').findAndCountAll({
             where: where,
             attributes: [
-                'id', 'nombre', 'activo', 'descripcion', 'email', 'usuario', 'time_zone',
-                [md.Sequelize.literal(`("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`), 'has_password'],
+                'id',
+                'nombre',
+                'activo',
+                'descripcion',
+                'email',
+                'usuario',
+                'time_zone',
+                [
+                    md.Sequelize.literal(
+                        `("empresas"."password" IS NOT NULL AND "empresas"."password" != '')`,
+                    ),
+                    'has_password',
+                ],
                 // El listado no devuelve el token en sí, solo si existe uno: el valor
                 // completo se pide aparte (getAccessToken) recién cuando el admin abre
                 // el detalle de esa empresa puntual, no en cada fila de la tabla.
-                [md.Sequelize.literal(`("empresas"."access_token" IS NOT NULL)`), 'has_access_token'],
+                [
+                    md.Sequelize.literal(
+                        `("empresas"."access_token" IS NOT NULL)`,
+                    ),
+                    'has_access_token',
+                ],
             ],
             limit,
             offset,
@@ -104,7 +154,10 @@ const getAllByUsers = async (req, res) => {
         });
         res.status(200).json(empresas);
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener las empresas: ${error.message}` });
+        console.log('COMPANIES BY USER error:', error);
+        res.status(500).json({
+            message: `Error al obtener las empresas: ${error.message}`,
+        });
     }
 };
 
@@ -113,20 +166,31 @@ const create = async (req, res) => {
         const { usuario, password } = req.body;
 
         if (usuario && !password) {
-            return res.status(400).json({ message: 'Debe ingresar una contraseña para el acceso de cliente.' });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        'Debe ingresar una contraseña para el acceso de cliente.',
+                });
         }
         if (password && !isPasswordSecure(password)) {
             return res.status(400).json({ message: PASSWORD_RULE_MESSAGE });
         }
         if (usuario && !(await checkUsuarioDisponible(usuario))) {
-            return res.status(409).json({ message: 'Ese usuario ya está en uso por otra empresa.' });
+            return res
+                .status(409)
+                .json({
+                    message: 'Ese usuario ya está en uso por otra empresa.',
+                });
         }
 
         req.body.usuario_creacion = req.user.id;
         const newEmpresa = await md.empresas.create(req.body);
         res.status(201).json(newEmpresa);
     } catch (error) {
-        res.status(500).json({ message: `Error al crear la empresa: ${error.message}` });
+        res.status(500).json({
+            message: `Error al crear la empresa: ${error.message}`,
+        });
     }
 };
 
@@ -144,7 +208,11 @@ const update = async (req, res) => {
 
         const { usuario, password } = req.body;
 
-        if (password !== undefined && password !== '' && !isPasswordSecure(password)) {
+        if (
+            password !== undefined &&
+            password !== '' &&
+            !isPasswordSecure(password)
+        ) {
             return res.status(400).json({ message: PASSWORD_RULE_MESSAGE });
         }
         // si no se manda password nueva, no se toca la que ya existe (no se limpia por accidente)
@@ -153,17 +221,35 @@ const update = async (req, res) => {
         }
 
         const finalUsuario = usuario !== undefined ? usuario : empresa.usuario;
-        const finalPassword = req.body.password !== undefined ? req.body.password : empresa.password;
+        const finalPassword =
+            req.body.password !== undefined
+                ? req.body.password
+                : empresa.password;
         if (finalUsuario && !finalPassword) {
-            return res.status(400).json({ message: 'Debe ingresar una contraseña para el acceso de cliente.' });
+            return res
+                .status(400)
+                .json({
+                    message:
+                        'Debe ingresar una contraseña para el acceso de cliente.',
+                });
         }
-        if (usuario && usuario !== empresa.usuario && !(await checkUsuarioDisponible(usuario, id))) {
-            return res.status(409).json({ message: 'Ese usuario ya está en uso por otra empresa.' });
+        if (
+            usuario &&
+            usuario !== empresa.usuario &&
+            !(await checkUsuarioDisponible(usuario, id))
+        ) {
+            return res
+                .status(409)
+                .json({
+                    message: 'Ese usuario ya está en uso por otra empresa.',
+                });
         }
 
         const t = await md.sequelize.transaction();
         try {
-            const updatedEmpresa = await empresa.update(req.body, { transaction: t });
+            const updatedEmpresa = await empresa.update(req.body, {
+                transaction: t,
+            });
 
             // Al desactivar una empresa, se desactivan en cascada sus
             // categorías, las campañas de esas categorías, y los reportes de
@@ -181,7 +267,7 @@ const update = async (req, res) => {
                 if (categoriaIds.length > 0) {
                     await md.categorias.update(
                         { activo: false },
-                        { where: { id_empresa: id }, transaction: t }
+                        { where: { id_empresa: id }, transaction: t },
                     );
 
                     const campanas = await md.campanas.findAll({
@@ -194,11 +280,17 @@ const update = async (req, res) => {
                     if (campanaIds.length > 0) {
                         await md.campanas.update(
                             { activo: false },
-                            { where: { id_categoria: categoriaIds }, transaction: t }
+                            {
+                                where: { id_categoria: categoriaIds },
+                                transaction: t,
+                            },
                         );
                         await md.reportes.update(
                             { activo: false },
-                            { where: { id_campana: campanaIds }, transaction: t }
+                            {
+                                where: { id_campana: campanaIds },
+                                transaction: t,
+                            },
                         );
                     }
                 }
@@ -211,7 +303,9 @@ const update = async (req, res) => {
             throw error;
         }
     } catch (error) {
-        res.status(500).json({ message: `Error al actualizar la empresa: ${error.message}` });
+        res.status(500).json({
+            message: `Error al actualizar la empresa: ${error.message}`,
+        });
     }
 };
 
@@ -231,7 +325,9 @@ const generateAccessToken = async (req, res) => {
         await empresa.update({ access_token });
         res.status(200).json({ access_token });
     } catch (error) {
-        res.status(500).json({ message: `Error al generar el link de acceso: ${error.message}` });
+        res.status(500).json({
+            message: `Error al generar el link de acceso: ${error.message}`,
+        });
     }
 };
 
@@ -242,13 +338,17 @@ const generateAccessToken = async (req, res) => {
 const getAccessToken = async (req, res) => {
     try {
         const { id } = req.params;
-        const empresa = await md.empresas.findByPk(id, { attributes: ['id', 'access_token'] });
+        const empresa = await md.empresas.findByPk(id, {
+            attributes: ['id', 'access_token'],
+        });
         if (!empresa) {
             return res.status(404).json({ message: 'Empresa no encontrada' });
         }
         res.status(200).json({ access_token: empresa.access_token });
     } catch (error) {
-        res.status(500).json({ message: `Error al obtener el link de acceso: ${error.message}` });
+        res.status(500).json({
+            message: `Error al obtener el link de acceso: ${error.message}`,
+        });
     }
 };
 
@@ -260,9 +360,13 @@ const revokeAccessToken = async (req, res) => {
             return res.status(404).json({ message: 'Empresa no encontrada' });
         }
         await empresa.update({ access_token: null });
-        res.status(200).json({ message: 'Link de acceso revocado correctamente' });
+        res.status(200).json({
+            message: 'Link de acceso revocado correctamente',
+        });
     } catch (error) {
-        res.status(500).json({ message: `Error al revocar el link de acceso: ${error.message}` });
+        res.status(500).json({
+            message: `Error al revocar el link de acceso: ${error.message}`,
+        });
     }
 };
 
