@@ -68,18 +68,22 @@ const getAllByUsers = async (req, res) => {
     try {
         const { user_ids, page = 1, limit = 10, name = null, company_id = null, active = true } = req.query;
         const offset = (page - 1) * limit;
-        let where = {
-            id_usuario: {
-                [md.Sequelize.Op.in]: user_ids.split(',')
-            },
-            activo: active
+
+        // 'user' es un rol restringido: solo puede ver las empresas de las que
+        // es responsable. admin/superadmin ven todas por defecto, con opción
+        // de filtrar por responsable(s) desde el front. El filtro de rol se
+        // decide acá con el usuario de la sesión — nunca se confía en el
+        // `user_ids` que mande el cliente para decidir si restringe o no,
+        // solo se usa (si viene) para que admin/superadmin acoten la vista.
+        const isUnrestricted = req.user.role?.rol === 'admin' || req.user.role?.rol === 'superadmin';
+
+        let where = company_id ? { id: company_id } : { activo: active };
+        if (!isUnrestricted) {
+            where.id_usuario = req.user.id;
+        } else if (user_ids) {
+            where.id_usuario = { [md.Sequelize.Op.in]: user_ids.split(',') };
         }
-        if (company_id) {
-            where.id = company_id;
-            delete where.activo;
-            delete where.id_usuario;
-        }
-        if (name) {
+        if (!company_id && name) {
             where.nombre = {
                 [md.Sequelize.Op.iLike]: `%${name}%`
             };
