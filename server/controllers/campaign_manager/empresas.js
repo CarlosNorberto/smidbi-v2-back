@@ -150,7 +150,11 @@ const getAllByUsers = async (req, res) => {
             ],
             limit,
             offset,
-            order: [['fecha_creacion', 'DESC']],
+            // Desempate por 'id' además de 'fecha_creacion': sin esto, dos
+            // empresas con la misma fecha_creacion (hasta el segundo) no
+            // tienen un orden garantizado entre una consulta y otra — eso es
+            // lo que se veía como parpadeo/reordenamiento en el listado.
+            order: [['fecha_creacion', 'DESC'], ['id', 'DESC']],
         });
         res.status(200).json(empresas);
     } catch (error) {

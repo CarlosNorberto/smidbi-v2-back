@@ -106,9 +106,17 @@ const getExpirationStatus = (card) => {
  * @returns {string} Código de contrato
  */
 const generateContractCode = (applicationDate, contractId) => {
-    const applicationYear = applicationDate
-        ? applicationDate.split('-')[0]
-        : null;
+    // Según el entorno, Sequelize/pg puede devolver esta columna DATE ya
+    // parseada como objeto Date o como string 'yyyy-mm-dd' — antes solo se
+    // contemplaba el caso string (`.split('-')`), lo que rompía en cualquier
+    // entorno donde llegara como Date ("applicationDate.split is not a
+    // function").
+    let applicationYear = null;
+    if (applicationDate instanceof Date) {
+        applicationYear = applicationDate.getFullYear();
+    } else if (typeof applicationDate === 'string' && applicationDate) {
+        applicationYear = applicationDate.split('-')[0];
+    }
 
     return `ADM-CTR-${applicationYear}-${contractId}`;
 };
