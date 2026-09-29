@@ -28,6 +28,10 @@ app.use(
         credentials: true, // Allow credentials (cookies, authorization headers, etc.)
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Allowed HTTP methods
         allowedHeaders: 'Content-Type,Authorization', // Allowed headers
+        // X-Proposal-Token: por defecto el navegador no deja leer headers de
+        // respuesta custom desde JS aunque estén en la respuesta — hay que
+        // listarlos acá explícitamente (ver pdf_planificador.js generate()).
+        exposedHeaders: 'X-Proposal-Token',
     }),
 );
 // app.options('*', cors());
@@ -105,6 +109,14 @@ if (process.env.LEGACY_QUALIFY_IMAGES_UPLOADS_PATH) {
     app.use(
         '/uploads/qualify_images',
         express.static(process.env.LEGACY_QUALIFY_IMAGES_UPLOADS_PATH),
+    );
+}
+// Carpeta compartida con el backend antiguo (server/uploads/pdf_planificador)
+// donde se guardan los PDF de la propuesta del Planificador (tabla compartida).
+if (process.env.LEGACY_PDF_PLANIFICADOR_UPLOADS_PATH) {
+    app.use(
+        '/uploads/pdf_planificador',
+        express.static(process.env.LEGACY_PDF_PLANIFICADOR_UPLOADS_PATH),
     );
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

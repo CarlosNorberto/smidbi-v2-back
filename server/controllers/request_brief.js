@@ -78,8 +78,45 @@ const duplicate = async (req, res) => {
     }
 };
 
+// Campos que el staff puede editar desde el tab "Detalle" para completar/ajustar
+// lo que el cliente cargó en el formulario público — sobre todo pensado para
+// que el Planificador tenga de dónde leer Estrategia/Audiencia al armar el PDF
+// de la propuesta (antes se editaba en un wizard aparte al generar el PDF, acá
+// queda persistido en el brief como cualquier otro dato).
+const STRATEGY_FIELDS = [
+    'estrategia',
+    'url_destino',
+    'intereses',
+    'segmentacion_sexo',
+    'segmentacion_edad',
+    'geolocalizacion_ciudad',
+];
+
+const updateStrategy = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const requestBrief = await md.request_brief.findByPk(id);
+        if (!requestBrief) {
+            return res.status(404).json({ message: 'No se encontró la solicitud de brief' });
+        }
+
+        const data = {};
+        STRATEGY_FIELDS.forEach((field) => {
+            if (req.body[field] !== undefined) data[field] = req.body[field];
+        });
+        data.usuario_modificacion = req.user.id;
+        data.fecha_modificacion = new Date();
+
+        await requestBrief.update(data);
+        res.status(200).json(requestBrief);
+    } catch (error) {
+        res.status(500).json({ message: `Error al guardar la estrategia del brief: ${error.message}` });
+    }
+};
+
 module.exports = {
     getAll,
     getById,
     duplicate,
+    updateStrategy,
 };

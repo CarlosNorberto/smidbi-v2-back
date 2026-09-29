@@ -56,6 +56,7 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/request_briefs/all', sessionAuth, requestBrief.getAll);
     app.get(process.env.PREFIX_API + '/request_briefs/one/:id', sessionAuth, requestBrief.getById);
     app.post(process.env.PREFIX_API + '/request_briefs/:id/duplicate', sessionAuth, requestBrief.duplicate);
+    app.put(process.env.PREFIX_API + '/request_briefs/:id/strategy', sessionAuth, requestBrief.updateStrategy);
 
     // CALIFICACIÓN DE BRIEF (q1-q4 / RATE CARD + imágenes de respaldo)
     app.get(process.env.PREFIX_API + '/qualify_briefs/by_brief/:id_brief', sessionAuth, qualifyBrief.getByBriefId);
