@@ -6,9 +6,27 @@
 const fs = require('fs');
 const path = require('path');
 const React = require('react');
-const { Document, Page, View, Text, Image, StyleSheet } = require('@react-pdf/renderer');
 
 const h = React.createElement;
+
+// @react-pdf/renderer es un paquete ESM-only ("type": "module") — un `require`
+// normal revienta en producción (Node 16, que no soporta requerir ESM desde
+// CommonJS; localmente no se notaba porque Node 24 sí lo tolera). Se carga
+// una sola vez con `import()` dinámico (soportado desde CJS en cualquier
+// versión de Node razonablemente reciente) y se cachea la promesa — todo lo
+// que sigue abajo son solo declaraciones de función, no corren hasta que se
+// invoca `buildPlanificadorPdf`, que es quien espera esta carga primero.
+let Document, Page, View, Text, Image, styles, renderToBuffer;
+let reactPdfReady = null;
+const ensureReactPdf = () => {
+    if (!reactPdfReady) {
+        reactPdfReady = import('@react-pdf/renderer').then((mod) => {
+            ({ Document, Page, View, Text, Image, renderToBuffer } = mod);
+            styles = buildStyles(mod.StyleSheet);
+        });
+    }
+    return reactPdfReady;
+};
 
 const BRAND_COLOR = '#E60023';
 
@@ -27,7 +45,7 @@ const LOGO_WHITE_DATA_URI = assetAsDataUri('logo_smid_white.png');
 // subida directamente a server/assets.
 const GOOGLE_PARTNER_DATA_URI = assetAsDataUri('google-partner-white.png');
 
-const styles = StyleSheet.create({
+const buildStyles = (StyleSheet) => StyleSheet.create({
     coverPage: {
         flexDirection: 'row',
         padding: 0,
@@ -572,7 +590,7 @@ const buildInversionTotalPage = (brief, secciones) => {
     );
 };
 
-const buildPlanificadorPdf = ({ brief, secciones, objetivosById }) => h(
+const buildDocument = ({ brief, secciones, objetivosById }) => h(
     Document,
     null,
     buildCoverPage(brief),
@@ -581,4 +599,13 @@ const buildPlanificadorPdf = ({ brief, secciones, objetivosById }) => h(
     buildInversionTotalPage(brief, secciones),
 );
 
-module.exports = { buildPlanificadorPdf };
+// Único punto de entrada del módulo: arma el documento y lo renderiza a
+// buffer. Async porque espera la carga de @react-pdf/renderer (ver
+// ensureReactPdf arriba) antes de tocar cualquiera de los builders de más
+// arriba, que asumen que Document/Page/View/Text/Image/styles ya existen.
+const renderPlanificadorPdf = async (args) => {
+    await ensureReactPdf();
+    return renderToBuffer(buildDocument(args));
+};
+
+module.exports = { renderPlanificadorPdf };

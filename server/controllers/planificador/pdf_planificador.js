@@ -3,8 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const md = require('../../models');
-const { renderToBuffer } = require('@react-pdf/renderer');
-const { buildPlanificadorPdf } = require('./pdf_template');
+const { renderPlanificadorPdf } = require('./pdf_template');
 
 // Carpeta compartida con el backend antiguo — ver LEGACY_PDF_PLANIFICADOR_UPLOADS_PATH
 // en .env (misma tabla `pdf_planificador`, misma carpeta física en ambos sistemas).
@@ -60,7 +59,7 @@ const generate = async (req, res) => {
 
         const objetivosById = new Map(objetivos.map((o) => [o.id, o.objetivo]));
 
-        const document = buildPlanificadorPdf({
+        const buffer = await renderPlanificadorPdf({
             brief: brief.toJSON(),
             secciones: secciones.map((s) => ({
                 tipo: s.tipo,
@@ -69,7 +68,6 @@ const generate = async (req, res) => {
             })),
             objetivosById,
         });
-        const buffer = await renderToBuffer(document);
 
         const filename = `${Date.now()}.pdf`;
         if (!fs.existsSync(UPLOADS_PATH)) {
