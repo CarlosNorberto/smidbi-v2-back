@@ -16,7 +16,7 @@ const generate = async (req, res) => {
         const tipos = Array.isArray(req.body.tipos) ? req.body.tipos.filter(Boolean) : [];
 
         if (tipos.length === 0) {
-            return res.status(400).json({ message: 'Debe seleccionar al menos un tipo (CPC/CPV o CPM).' });
+            return res.status(400).json({ message: 'Debe seleccionar al menos un tipo (CPC/CPV/CPE o CPM).' });
         }
 
         // El grupo NUNCA se toma del cliente: se deriva siempre de la

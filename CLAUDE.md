@@ -16,7 +16,7 @@ El objetivo de este sistema nuevo (backend + frontend) es **mejorar la experienc
 ## PDF del Planificador — páginas y tamaño (`server/controllers/planificador/pdf_template.js`)
 
 - El documento usa una constante `PAGE_SIZE` (array `[ancho, alto]` en puntos) en vez de `size:'A4', orientation:'landscape'` en cada `Page` — todas las páginas la comparten, así que para ajustar el tamaño de todo el PDF alcanza con cambiar esa única constante.
-- **Página de Costos (tabla CPC/CPV + CPM) quitada del PDF** a pedido del usuario (seguía viéndose "de tabla", no encajaba con el resto del rediseño tipo deck). La función `buildCostosPage` (y su tabla `buildCostosTable`, reutiliza los estilos viejos `table/row/headerCell/cell/cellLeft/totalRow/cellActive`) **sigue completa en el archivo**, solo no se llama. Para volver a incluirla: en `buildDocument`, reemplazar el comentario que dice "La página de Costos... se quitó del PDF" por:
+- **Página de Costos (tabla CPC/CPV/CPE + CPM) quitada del PDF** a pedido del usuario (seguía viéndose "de tabla", no encajaba con el resto del rediseño tipo deck). La función `buildCostosPage` (y su tabla `buildCostosTable`, reutiliza los estilos viejos `table/row/headerCell/cell/cellLeft/totalRow/cellActive`) **sigue completa en el archivo**, solo no se llama. Para volver a incluirla: en `buildDocument`, reemplazar el comentario que dice "La página de Costos... se quitó del PDF" por:
   ```js
   ...secciones.map((s) => buildCostosPage(brief, s.tipo, s.lineas, objetivosById)),
   ```

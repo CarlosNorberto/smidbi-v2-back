@@ -1042,11 +1042,11 @@ const buildPresupuestoCard = (moneda, inversion) => h(
 
 // Card 2: "Plataforma" + nombre real, y viñetas con el modelo de costo, el
 // costo proyectado y la frecuencia de esa línea. El modelo se muestra
-// genérico por tipo de sección (CPC/CPV vs CPM) — el dato real no distingue
+// genérico por tipo de sección (CPC/CPV/CPE vs CPM) — el dato real no distingue
 // CPC de CPV/CPE/CPD por línea, así que no se inventa.
 const buildPlataformaCard = (linea, tipo, moneda) => {
-    const modeloLabel = tipo === 'CPM' ? 'Modelo CPM (Costo por Mil Impresiones)' : 'Modelo CPC/CPV (Costo por Clic o View)';
-    const unidad = tipo === 'CPM' ? 'por mil impresiones' : 'por clic/view';
+    const modeloLabel = tipo === 'CPM' ? 'Modelo CPM (Costo por Mil Impresiones)' : 'Modelo CPC/CPV/CPE (Costo por Clic, View o Engagement)';
+    const unidad = tipo === 'CPM' ? 'por mil impresiones' : 'por clic/view/engagement';
     return h(
         View,
         { style: styles.mecanicaCard },
@@ -1126,7 +1126,7 @@ const buildMecanicaInversionPage = (brief, tipo, lineas, objetivosById) => {
 // (buildCronogramaEjecucionPage, la barra de semanas) como parte del
 // rediseño.
 const buildCostosPage = (brief, tipo, lineas, objetivosById) => {
-    const tipoLabel = tipo === 'CPM' ? 'Campaña Branding (CPM)' : 'Campaña Performance (CPC/CPV)';
+    const tipoLabel = tipo === 'CPM' ? 'Campaña Branding (CPM)' : 'Campaña Performance (CPC/CPV/CPE)';
 
     return h(
         Page,
@@ -1359,7 +1359,7 @@ const buildDocument = ({ brief, secciones, objetivosById, boliviaMapDataUri }) =
     ...secciones
         .map((s) => buildCronogramaEjecucionPage(brief, s.tipo, s.lineas, s.summaryByCosto || new Map()))
         .filter(Boolean),
-    // La página de Costos (tabla CPC/CPV + CPM) se quitó del PDF a pedido del
+    // La página de Costos (tabla CPC/CPV/CPE + CPM) se quitó del PDF a pedido del
     // usuario — buildCostosPage sigue definida y funcional más abajo, ver
     // CLAUDE.md ("Página de Costos del PDF del Planificador") para cómo
     // volver a incluirla.
