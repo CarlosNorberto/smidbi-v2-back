@@ -12,3 +12,12 @@ El objetivo de este sistema nuevo (backend + frontend) es **mejorar la experienc
 - Rutas de features no específicos de un dominio van planas en `server/routes/index.js`; features de un dominio (ej. campaign manager) tienen su propio `server/routes/<dominio>/index.js`.
 - Sesión vía `sessionAuth` (middleware compartido); nunca tocar el backend/frontend antiguo.
 - Imágenes: cuando un feature nuevo sube archivos que la app antigua ya guardaba en disco, se comparte la misma carpeta física vía una env var `LEGACY_*_UPLOADS_PATH`, montada como estático en `app.js` (`if (process.env.X) { app.use(...) }`), con `multer` en `memoryStorage()` + `sharp` para resize/compresión antes de `fs.promises.writeFile`, y nombres de archivo con UUID (`crypto.randomUUID()`) para no colisionar con los nombres `Date.now()` de la app antigua.
+
+## PDF del Planificador — páginas y tamaño (`server/controllers/planificador/pdf_template.js`)
+
+- El documento usa una constante `PAGE_SIZE` (array `[ancho, alto]` en puntos) en vez de `size:'A4', orientation:'landscape'` en cada `Page` — todas las páginas la comparten, así que para ajustar el tamaño de todo el PDF alcanza con cambiar esa única constante.
+- **Página de Costos (tabla CPC/CPV + CPM) quitada del PDF** a pedido del usuario (seguía viéndose "de tabla", no encajaba con el resto del rediseño tipo deck). La función `buildCostosPage` (y su tabla `buildCostosTable`, reutiliza los estilos viejos `table/row/headerCell/cell/cellLeft/totalRow/cellActive`) **sigue completa en el archivo**, solo no se llama. Para volver a incluirla: en `buildDocument`, reemplazar el comentario que dice "La página de Costos... se quitó del PDF" por:
+  ```js
+  ...secciones.map((s) => buildCostosPage(brief, s.tipo, s.lineas, objetivosById)),
+  ```
+  (antes de `buildGlosarioPage(secciones)`, mismo lugar donde estaba).
