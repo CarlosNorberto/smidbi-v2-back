@@ -3,7 +3,7 @@ const bcrypt = require('bcrypt');
 
 const getAll = async (req, res) => {
     try {
-        const { attributes, active } = req.query;
+        const { attributes, active, include_hidden } = req.query;
         const usuarioAttributes = ['id', 'nombre', 'email', 'activo'];
         if (attributes) {
             usuarioAttributes.push(...attributes.split(','));
@@ -18,9 +18,13 @@ const getAll = async (req, res) => {
             order: [['nombre', 'ASC']],
         });
 
-        // El rol 'hidden' no debe aparecer en el listado de usuarios salvo
-        // para quien esté viendo con role=superadmin.
-        if (req.user.role?.rol !== 'superadmin') {
+        // El rol 'hidden' nunca aparece salvo que quien pida la lista sea
+        // superadmin Y pida explícitamente verlo (`include_hidden=true`) —
+        // así la tabla de administración de usuarios lo puede mostrar, pero
+        // ningún dropdown de "seleccionar usuario" (responsable, reviewer,
+        // etc.) lo ofrece nunca, sin importar el rol de quien esté mirando.
+        const puedeVerOcultos = include_hidden === 'true' && req.user.role?.rol === 'superadmin';
+        if (!puedeVerOcultos) {
             usuarios = usuarios.filter((u) => u.role?.rol !== 'hidden');
         }
 
