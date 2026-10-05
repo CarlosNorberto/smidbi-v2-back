@@ -57,6 +57,20 @@ const generate = async (req, res) => {
             return res.status(400).json({ message: 'No hay líneas de cotización guardadas para ninguno de los tipos seleccionados.' });
         }
 
+        // Valida TODOS los tipos incluidos en el PDF, no solo el que el
+        // usuario tenga abierto en pantalla — cada pestaña del Planificador
+        // (CPC/CPV/CPE y CPM) es una grilla separada en el frontend, así que
+        // su validación de "KPI obligatorio" solo ve la pestaña activa. Acá
+        // sí se ven todas las líneas reales de todos los tipos pedidos.
+        const lineaSinKpi = secciones
+            .flatMap((s) => s.lineas)
+            .find((l) => !l.kpi_principal || !l.kpi_secundario);
+        if (lineaSinKpi) {
+            return res.status(400).json({
+                message: `La línea "${lineaSinKpi.nombre}" necesita un KPI principal y un KPI secundario antes de generar el PDF. Revisa la pestaña correspondiente en el Planificador.`,
+            });
+        }
+
         const objetivosById = new Map(objetivos.map((o) => [o.id, o.objetivo]));
 
         const buffer = await renderPlanificadorPdf({

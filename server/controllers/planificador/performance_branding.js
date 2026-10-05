@@ -84,6 +84,15 @@ const saveBulk = async (req, res) => {
         if (!linea.id_plataforma || !linea.id_costo || !linea.nombre) {
             return res.status(400).json({ message: 'Cada línea requiere id_plataforma, id_costo y nombre.' });
         }
+        // El PDF del Planificador (Resumen Ejecutivo, Mecánica de Inversión)
+        // necesita el KPI principal y secundario de cada línea para no mostrar
+        // "KPI sin definir" — se exige acá, no solo en el frontend, porque el
+        // endpoint también se puede llamar directo (curl, otro cliente).
+        if (!linea.kpi_principal || !linea.kpi_secundario) {
+            return res.status(400).json({
+                message: `La línea "${linea.nombre}" necesita un KPI principal y un KPI secundario antes de guardar.`,
+            });
+        }
         const summaryMeses = linea.summary_meses;
         if (summaryMeses && Math.round(sumaSummaryMeses(summaryMeses)) !== 100) {
             return res.status(400).json({

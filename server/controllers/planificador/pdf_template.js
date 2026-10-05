@@ -45,12 +45,14 @@ const ensureReactPdf = () => {
     return reactPdfReady;
 };
 
-// A4 horizontal [841.89, 595.28] con la altura reducida 30% — se ve más
-// parecido a un slide de deck (ancho, bajo) que a una hoja A4 de verdad,
-// más cerca del diseño de referencia que el usuario compartió. Todas las
-// páginas usan esta misma constante en vez de `size:'A4', orientation:
-// 'landscape'`.
-const PAGE_SIZE = [841.89, 416.7];
+// Mismo ancho que A4 horizontal (841.89pt) pero con el alto del aspect ratio
+// 16:9 de un slide de verdad (841.89 * 9/16) en vez de los 595.28pt de una
+// hoja A4 — es el mismo motivo por el que se achicó originalmente (verse
+// como un deck, no como una hoja impresa), con un poco más de aire que el
+// primer recorte (30%) porque algunas tarjetas quedaban justas de espacio.
+// Todas las páginas usan esta misma constante en vez de `size:'A4',
+// orientation:'landscape'`.
+const PAGE_SIZE = [841.89, 473.56];
 
 const BRAND_COLOR = '#E60023';
 const COLORS = {
@@ -193,7 +195,7 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         flex: 1,
         backgroundColor: COLORS.card,
         borderRadius: 16,
-        padding: 24,
+        padding: 18,
         borderStyle: 'solid',
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -218,24 +220,24 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         fontSize: 16,
         fontWeight: 400,
         color: COLORS.gray,
-        marginBottom: 6,
+        marginBottom: 4,
     },
     kpiObjKpiLine: {
         fontSize: 22,
         fontWeight: 700,
         color: COLORS.black,
-        marginBottom: 10,
+        marginBottom: 6,
     },
     kpiObjCaption: {
         fontSize: 16,
         fontWeight: 400,
         color: COLORS.gray,
-        lineHeight: 1.3,
+        lineHeight: 1.25,
     },
     kpiCardExtra: {
         fontSize: 9,
         color: COLORS.gray,
-        marginTop: 6,
+        marginTop: 4,
     },
     // Página "Perfil de Audiencia": mapa de Bolivia con pines + tarjeta de
     // demografía, mismo fondo/tipografía clara que el resto del rediseño.
@@ -348,8 +350,18 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         fontSize: 26,
         fontWeight: 800,
         color: COLORS.black,
-        marginBottom: 22,
+        marginBottom: 6,
         lineHeight: 1.2,
+    },
+    // Subtítulo compartido (Resumen Ejecutivo, Mecánica de Inversión) que
+    // identifica a cuál tipo de sección corresponde la página — necesario
+    // desde que cada tipo (CPC/CPV/CPE vs CPM) pasó a tener su propia página
+    // en vez de mezclarse en una sola.
+    tipoSectionSubtitle: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: COLORS.gray,
+        marginBottom: 20,
     },
     mecanicaCenterWrap: {
         flex: 1,
@@ -443,7 +455,7 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         fontSize: 26,
         fontWeight: 800,
         color: COLORS.black,
-        marginBottom: 14,
+        marginBottom: 4,
     },
     cronogramaCenterWrap: {
         flex: 1,
@@ -667,13 +679,13 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         alignItems: 'center',
     },
     totalFacturadoLockWrap: {
-        marginBottom: 20,
+        marginBottom: 12,
     },
     totalFacturadoCard: {
         width: 380,
         backgroundColor: COLORS.card,
         borderRadius: 16,
-        padding: 24,
+        padding: 18,
         borderStyle: 'solid',
         borderWidth: 1,
         borderColor: COLORS.border,
@@ -681,7 +693,7 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
     totalFacturadoRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 10,
+        marginBottom: 6,
     },
     totalFacturadoRowLabel: {
         fontSize: 12,
@@ -695,8 +707,8 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
     totalFacturadoGrandRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 8,
-        paddingTop: 14,
+        marginTop: 4,
+        paddingTop: 10,
         borderTopWidth: 1,
         borderTopColor: COLORS.border,
         borderStyle: 'solid',
@@ -715,8 +727,14 @@ const buildStyles = (StyleSheet) => StyleSheet.create({
         fontSize: 10,
         color: COLORS.gray,
         textAlign: 'center',
-        marginTop: 20,
+        marginTop: 12,
         maxWidth: 360,
+    },
+    totalFacturadoLecturaNote: {
+        fontSize: 8,
+        marginTop: 6,
+        maxWidth: 420,
+        lineHeight: 1.4,
     },
 });
 
@@ -736,6 +754,16 @@ const formatNumber = (value) => {
     const num = Number(value) || 0;
     return num.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+// Label legible del tipo de sección — usado como subtítulo en varias páginas
+// (Resumen Ejecutivo, Mecánica de Inversión, Costos) para que quede claro a
+// cuál de las dos secciones (si el PDF incluye ambas) corresponde esa página.
+const getTipoLabel = (tipo) => (tipo === 'CPM' ? 'Campaña Branding (CPM)' : 'Campaña Performance (CPC/CPV/CPE)');
+
+// Fallback cuando una línea no tiene KPI principal/secundario cargado
+// (dato legacy con kpi_principal/kpi_secundario = 0) — texto explícito en vez
+// de la palabra suelta "Objetivo", que sin contexto no se entendía.
+const SIN_KPI_LABEL = 'KPI sin definir';
 
 // Encabezado repetido en todas las páginas de contenido (no en la portada, que
 // tiene su propio diseño): barra roja con el título a la izquierda y el logo
@@ -988,6 +1016,7 @@ const buildCronogramaEjecucionPage = (brief, tipo, lineas, summaryByCosto) => {
         { size: PAGE_SIZE, style: styles.cronogramaPage, key: `cronograma-${tipo}` },
         h(Text, { style: styles.cronogramaTitle }, 'Cronograma de Ejecución'),
         h(Text, { style: styles.cronogramaSubtitleBig }, `Sprint de ${sprintMes}`),
+        h(Text, { style: styles.tipoSectionSubtitle }, getTipoLabel(tipo)),
         h(
             View,
             { style: styles.cronogramaCenterWrap },
@@ -1087,7 +1116,7 @@ const buildKpiSecundarioCard = (kpiSecundario) => h(
 // decisión ya confirmada con el usuario: no se resume en un solo embudo
 // porque cada línea puede perseguir plataformas/KPIs distintos entre sí.
 const buildFunnelRow = (linea, tipo, moneda, objetivosById) => {
-    const kpiPrincipal = objetivosById.get(linea.kpi_principal) || 'Objetivo';
+    const kpiPrincipal = objetivosById.get(linea.kpi_principal) || SIN_KPI_LABEL;
     const kpiSecundario = objetivosById.get(linea.kpi_secundario) || '—';
 
     return h(
@@ -1114,6 +1143,7 @@ const buildMecanicaInversionPage = (brief, tipo, lineas, objetivosById) => {
         Page,
         { size: PAGE_SIZE, style: styles.mecanicaPage, key: `mecanica-${tipo}` },
         h(Text, { style: styles.mecanicaTitle }, 'Mecánica de Inversión:\nEl Embudo de Rendimiento'),
+        h(Text, { style: styles.tipoSectionSubtitle }, getTipoLabel(tipo)),
         h(
             View,
             { style: styles.mecanicaCenterWrap },
@@ -1126,7 +1156,7 @@ const buildMecanicaInversionPage = (brief, tipo, lineas, objetivosById) => {
 // (buildCronogramaEjecucionPage, la barra de semanas) como parte del
 // rediseño.
 const buildCostosPage = (brief, tipo, lineas, objetivosById) => {
-    const tipoLabel = tipo === 'CPM' ? 'Campaña Branding (CPM)' : 'Campaña Performance (CPC/CPV/CPE)';
+    const tipoLabel = getTipoLabel(tipo);
 
     return h(
         Page,
@@ -1151,7 +1181,7 @@ const sumInversion = (lineas) => lineas.reduce((acc, l) => acc + (Number(l.inver
 const MODELOS_GLOSARIO = [
     { code: 'CPC', nombre: 'Costo por Clic', desc: 'Se paga por cada clic único de un usuario en el anuncio.', tipos: ['CPC_CPV'] },
     { code: 'CPV', nombre: 'Costo por View', desc: 'Se paga por cada visualización completa de un video.', tipos: ['CPC_CPV'] },
-    { code: 'CPE', nombre: 'Costo por Engagement', desc: 'Se paga por cada interacción (like, comentario, compartir) con el anuncio.', tipos: [] },
+    { code: 'CPE', nombre: 'Costo por Engagement', desc: 'Se paga por cada interacción (like, comentario, compartir) con el anuncio.', tipos: ['CPC_CPV'] },
     { code: 'CPM', nombre: 'Costo por Mil Impresiones', desc: 'Se paga por cada mil veces que se muestra el anuncio.', tipos: ['CPM'] },
 ];
 
@@ -1232,6 +1262,11 @@ const buildTotalFacturadoPage = (brief, secciones) => {
                 { style: styles.totalFacturadoNote },
                 'El monto total facturado incluye los costos por los servicios de SMID Media Center.',
             ),
+            h(
+                Text,
+                { style: [styles.totalFacturadoNote, styles.totalFacturadoLecturaNote] },
+                'LECTURA DE PROPUESTA: Todos los costos están expresados en Dólares Americanos ($us) e incluyen todos los costos e impuestos de ley.',
+            ),
         ),
     );
 };
@@ -1268,7 +1303,7 @@ const buildKpiIcons = () => ({
 const buildKpiGroups = (lineas, kpiField, objetivosById) => {
     const map = new Map();
     lineas.forEach((linea) => {
-        const label = objetivosById.get(linea[kpiField]) || 'Objetivo';
+        const label = objetivosById.get(linea[kpiField]) || SIN_KPI_LABEL;
         map.set(label, (map.get(label) || 0) + (Number(linea.objetivo) || 0));
     });
     return [...map.entries()]
@@ -1276,46 +1311,65 @@ const buildKpiGroups = (lineas, kpiField, objetivosById) => {
         .sort((a, b) => b.total - a.total);
 };
 
+// Tope de líneas "+N {KPI}" que se muestran en las cards de Objetivo — una
+// cotización puede tener muchas líneas con KPIs distintos entre sí, y esa
+// lista no tiene límite natural (a diferencia del resto del contenido de la
+// card, que siempre mide lo mismo). Sin un tope, una cotización con muchas
+// líneas puede hacer crecer la card lo suficiente para desbordar la página
+// (el resto se corta a la página siguiente, dejando una página casi vacía).
+const MAX_EXTRA_KPIS = 2;
+
 // Tarjeta de objetivo (card 2 y 3): ícono gris, título normal, "Generación de
 // {KPI}" (nombre real del KPI principal/secundario cargado en la línea de
 // cotización) en negrita, y un texto de cierre — con el número incluido ahí
 // mismo (mismo tamaño/color que el texto, sin negrita ni rojo) cuando
 // corresponde mostrarlo. El card de Objetivo Secundario no lleva número,
 // solo el texto fijo de cierre.
-const buildObjetivoCard = ({ icon, cardLabel, kpiLabel, captionText, extra }) => h(
-    View,
-    { style: styles.kpiCard },
-    icon,
-    h(Text, { style: [styles.kpiObjTitle, { marginTop: 14 }] }, cardLabel),
-    h(Text, { style: styles.kpiObjKpiLine }, `Generación de ${kpiLabel}`),
-    h(Text, { style: styles.kpiObjCaption }, captionText),
-    extra && extra.length > 0
-        ? h(View, { style: { marginTop: 6 } }, extra.map((e, i) => h(
-            Text,
-            { key: i, style: styles.kpiCardExtra },
-            `+ ${formatInt(e.total)} ${e.label}`,
-        )))
-        : null,
-);
+const buildObjetivoCard = ({ icon, cardLabel, kpiLabel, captionText, extra }) => {
+    const extraVisible = (extra || []).slice(0, MAX_EXTRA_KPIS);
+    const extraRestantes = (extra || []).length - extraVisible.length;
+
+    return h(
+        View,
+        { style: styles.kpiCard },
+        icon,
+        h(Text, { style: [styles.kpiObjTitle, { marginTop: 14 }] }, cardLabel),
+        h(Text, { style: styles.kpiObjKpiLine }, `Generación de ${kpiLabel}`),
+        h(Text, { style: styles.kpiObjCaption }, captionText),
+        extraVisible.length > 0
+            ? h(
+                View,
+                { style: { marginTop: 6 } },
+                extraVisible.map((e, i) => h(
+                    Text,
+                    { key: i, style: styles.kpiCardExtra },
+                    `+ ${formatInt(e.total)} ${e.label}`,
+                )),
+                extraRestantes > 0
+                    ? h(Text, { style: styles.kpiCardExtra }, `+ ${extraRestantes} KPI${extraRestantes > 1 ? 's' : ''} más`)
+                    : null,
+            )
+            : null,
+    );
+};
 
 // Página "Resumen Ejecutivo": 3 tarjetas de alto nivel (inversión total,
-// objetivo principal, objetivo secundario) agregando TODAS las líneas de
-// TODOS los tipos incluidos en el PDF — a diferencia del embudo "Mecánica de
-// Inversión" (pendiente, se repite por línea), esta es la vista panorámica.
-// Sin header: la página son solo las 3 tarjetas centradas.
-const buildKpiResumenPage = (brief, secciones, objetivosById) => {
+// objetivo principal, objetivo secundario) — una página por tipo de sección
+// (igual que Mecánica/Cronograma/Costos), nunca mezclando CPC/CPV/CPE con
+// CPM en un mismo total: son unidades distintas y mezclarlas no se entendía.
+const buildKpiResumenPage = (brief, tipo, lineas, objetivosById) => {
     const moneda = brief.moneda || '';
-    const allLineas = secciones.flatMap((s) => s.lineas);
-    const granTotal = sumInversion(allLineas);
-    const principalGroups = buildKpiGroups(allLineas, 'kpi_principal', objetivosById);
-    const secundarioGroups = buildKpiGroups(allLineas, 'kpi_secundario', objetivosById);
+    const granTotal = sumInversion(lineas);
+    const principalGroups = buildKpiGroups(lineas, 'kpi_principal', objetivosById);
+    const secundarioGroups = buildKpiGroups(lineas, 'kpi_secundario', objetivosById);
     const icons = buildKpiIcons();
     const principal = principalGroups[0];
     const secundario = secundarioGroups[0];
 
     return h(
         Page,
-        { size: PAGE_SIZE, style: styles.kpiPage },
+        { size: PAGE_SIZE, style: styles.kpiPage, key: `kpi-${tipo}` },
+        h(Text, { style: styles.tipoSectionSubtitle }, `Resumen Ejecutivo — ${getTipoLabel(tipo)}`),
         h(
             View,
             { style: styles.kpiCenterWrap },
@@ -1332,7 +1386,7 @@ const buildKpiResumenPage = (brief, secciones, objetivosById) => {
                 buildObjetivoCard({
                     icon: icons.cursor,
                     cardLabel: 'Objetivo Principal',
-                    kpiLabel: principal?.label || 'Objetivo',
+                    kpiLabel: principal?.label || SIN_KPI_LABEL,
                     captionText: principal
                         ? `${formatInt(principal.total)} interacciones únicas estimadas.`
                         : 'interacciones únicas estimadas.',
@@ -1341,8 +1395,9 @@ const buildKpiResumenPage = (brief, secciones, objetivosById) => {
                 buildObjetivoCard({
                     icon: icons.person,
                     cardLabel: 'Objetivo Secundario',
-                    kpiLabel: secundario?.label || 'Objetivo',
+                    kpiLabel: secundario?.label || SIN_KPI_LABEL,
                     captionText: 'El tráfico generado alimentará la base de contactos.',
+                    extra: secundarioGroups.slice(1),
                 }),
             ),
         ),
@@ -1353,7 +1408,7 @@ const buildDocument = ({ brief, secciones, objetivosById, boliviaMapDataUri }) =
     Document,
     null,
     buildCoverPage(brief),
-    buildKpiResumenPage(brief, secciones, objetivosById),
+    ...secciones.map((s) => buildKpiResumenPage(brief, s.tipo, s.lineas, objetivosById)),
     buildAudienciaPage(brief, boliviaMapDataUri),
     ...secciones.map((s) => buildMecanicaInversionPage(brief, s.tipo, s.lineas, objetivosById)),
     ...secciones
