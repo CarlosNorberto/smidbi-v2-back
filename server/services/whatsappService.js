@@ -48,4 +48,29 @@ const sendTemplateMessage = async (
     }
 };
 
-module.exports = { sendTemplateMessage };
+/**
+ * Envía un mensaje de texto libre. Meta solo lo entrega si el destinatario
+ * escribió al número en las últimas 24 h (ventana de conversación); fuera de
+ * esa ventana hay que usar una plantilla.
+ * @param {string} to - Número del destinatario, sin '+' (ej: '59167146124')
+ * @param {string} body - Texto del mensaje
+ */
+const sendTextMessage = async (to, body) => {
+    const payload = {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body },
+    };
+
+    try {
+        const response = await client.post('', payload);
+        return response.data;
+    } catch (error) {
+        const detail = error.response?.data || error.message;
+        console.error('Error enviando mensaje de WhatsApp:', detail);
+        throw new Error(`Fallo al enviar WhatsApp: ${JSON.stringify(detail)}`);
+    }
+};
+
+module.exports = { sendTemplateMessage, sendTextMessage };

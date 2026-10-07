@@ -6,6 +6,7 @@ const clientAuth = require('../controllers/client_auth');
 const requestBrief = require('../controllers/request_brief');
 const qualifyBrief = require('../controllers/qualify_brief');
 const costoPor = require('../controllers/costo_por');
+const whatsapp = require('../controllers/whatsapp');
 
 const multer = require('multer');
 const uploadQualifyImage = multer({
@@ -72,5 +73,8 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/costo_por/admin/all', sessionAuth, requireRole('admin', 'superadmin'), costoPor.getAllAdmin);
     app.post(process.env.PREFIX_API + '/costo_por/create', sessionAuth, requireRole('admin', 'superadmin'), costoPor.create);
     app.put(process.env.PREFIX_API + '/costo_por/update/:id', sessionAuth, requireRole('admin', 'superadmin'), costoPor.update);
+
+    // WHATSAPP — envío de prueba (superadmin)
+    app.post(process.env.PREFIX_API + '/whatsapp/send', sessionAuth, requireRole('superadmin'), whatsapp.send);
 
 }
