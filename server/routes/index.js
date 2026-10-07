@@ -67,10 +67,10 @@ module.exports = (app) => {
     app.delete(process.env.PREFIX_API + '/qualify_briefs/images/:id', sessionAuth, qualifyBrief.deleteImage);
     app.get(process.env.PREFIX_API + '/qualify_briefs/ratecard_groups', sessionAuth, costoPor.getRateCardGroups);
 
-    // ADMINISTRACIÓN DE RATE CARD (costo_por) — superadmin. No se borra, solo se
+    // ADMINISTRACIÓN DE RATE CARD (costo_por) — admin/superadmin. No se borra, solo se
     // activa/desactiva (mismo criterio que plataformas).
-    app.get(process.env.PREFIX_API + '/costo_por/admin/all', sessionAuth, requireRole('superadmin'), costoPor.getAllAdmin);
-    app.post(process.env.PREFIX_API + '/costo_por/create', sessionAuth, requireRole('superadmin'), costoPor.create);
-    app.put(process.env.PREFIX_API + '/costo_por/update/:id', sessionAuth, requireRole('superadmin'), costoPor.update);
+    app.get(process.env.PREFIX_API + '/costo_por/admin/all', sessionAuth, requireRole('admin', 'superadmin'), costoPor.getAllAdmin);
+    app.post(process.env.PREFIX_API + '/costo_por/create', sessionAuth, requireRole('admin', 'superadmin'), costoPor.create);
+    app.put(process.env.PREFIX_API + '/costo_por/update/:id', sessionAuth, requireRole('admin', 'superadmin'), costoPor.update);
 
 }

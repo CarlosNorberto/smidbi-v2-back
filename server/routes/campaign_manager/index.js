@@ -97,10 +97,10 @@ module.exports = (app) => {
 
     // PLATAFORMAS
     app.get(process.env.PREFIX_API + '/platforms/all', sessionAuth, plataformas.getAll);
-    // Administración de plataformas (superadmin): nunca se borran, solo se desactivan.
-    app.get(process.env.PREFIX_API + '/platforms/admin/all', sessionAuth, requireRole('superadmin'), plataformas.getAllAdmin);
-    app.post(process.env.PREFIX_API + '/platforms/create', sessionAuth, requireRole('superadmin'), plataformas.create);
-    app.put(process.env.PREFIX_API + '/platforms/update/:id', sessionAuth, requireRole('superadmin'), plataformas.update);
+    // Administración de plataformas (admin/superadmin): nunca se borran, solo se desactivan.
+    app.get(process.env.PREFIX_API + '/platforms/admin/all', sessionAuth, requireRole('admin', 'superadmin'), plataformas.getAllAdmin);
+    app.post(process.env.PREFIX_API + '/platforms/create', sessionAuth, requireRole('admin', 'superadmin'), plataformas.create);
+    app.put(process.env.PREFIX_API + '/platforms/update/:id', sessionAuth, requireRole('admin', 'superadmin'), plataformas.update);
 
     // OBJETIVOS
     app.get(process.env.PREFIX_API + '/objectives/all', sessionAuth, objetivos.getAll);
