@@ -53,15 +53,21 @@ const getAllAdmin = async (req, res) => {
     }
 };
 
+const MODELOS = ['CPC', 'CPV', 'CPE'];
+
 const create = async (req, res) => {
     try {
-        const { id_plataforma, tipo, nombre, grupo, costo } = req.body;
+        const { id_plataforma, tipo, modelo, nombre, grupo, costo } = req.body;
         if (!id_plataforma || !tipo || !nombre || !grupo || costo === undefined) {
             return res.status(400).json({ message: 'id_plataforma, tipo, nombre, grupo y costo son obligatorios.' });
+        }
+        if (tipo === 'CPC_CPV' && !MODELOS.includes(modelo)) {
+            return res.status(400).json({ message: 'El modelo debe ser CPC, CPV o CPE.' });
         }
         const nuevo = await md.costo_por.create({
             id_plataforma,
             tipo,
+            modelo: tipo === 'CPC_CPV' ? modelo : null,
             nombre,
             grupo,
             costo,
@@ -85,6 +91,15 @@ const update = async (req, res) => {
             return res.status(404).json({ message: 'Costo no encontrado' });
         }
         const data = { ...req.body, usuario_modificacion: req.user.id, fecha_modificacion: new Date() };
+        const tipoFinal = data.tipo ?? existing.tipo;
+        if (tipoFinal === 'CPM') {
+            data.modelo = null;
+        } else if (data.modelo !== undefined || data.tipo !== undefined) {
+            const modeloFinal = data.modelo ?? existing.modelo;
+            if (!MODELOS.includes(modeloFinal)) {
+                return res.status(400).json({ message: 'El modelo debe ser CPC, CPV o CPE.' });
+            }
+        }
         const updated = await existing.update(data);
         res.status(200).json(updated);
     } catch (error) {

@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
         },
         id_plataforma: DataTypes.INTEGER,
         tipo: DataTypes.STRING,
+        modelo: DataTypes.STRING(3),
         nombre: DataTypes.STRING,
         grupo: DataTypes.INTEGER,
         costo: DataTypes.NUMERIC(4, 2),

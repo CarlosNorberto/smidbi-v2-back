@@ -49,9 +49,11 @@ const generate = async (req, res) => {
         // Si alguno de los tipos pedidos no tiene líneas guardadas, esa sección
         // simplemente no entra al PDF (no se aborta todo el documento por eso) —
         // solo falla si NINGUNO de los tipos seleccionados tiene datos.
+        // CPM siempre va primero en el PDF, luego CPC/CPV/CPE.
         const secciones = tipos
             .map((tipo, i) => ({ tipo, lineas: lineasPorTipo[i], summaries: summariesPorTipo[i] }))
-            .filter((s) => s.lineas.length > 0);
+            .filter((s) => s.lineas.length > 0)
+            .sort((a, b) => (b.tipo === 'CPM') - (a.tipo === 'CPM'));
 
         if (secciones.length === 0) {
             return res.status(400).json({ message: 'No hay líneas de cotización guardadas para ninguno de los tipos seleccionados.' });
@@ -73,11 +75,19 @@ const generate = async (req, res) => {
 
         const objetivosById = new Map(objetivos.map((o) => [o.id, o.objetivo]));
 
+        // `modelo` (CPC/CPV/CPE) vive en costo_por, no en performance_branding:
+        // se trae por id_costo para poder agrupar las líneas en el PDF.
+        const idsCosto = [...new Set(secciones.flatMap((s) => s.lineas.map((l) => l.id_costo)).filter(Boolean))];
+        const costos = idsCosto.length
+            ? await md.costo_por.findAll({ where: { id: idsCosto }, attributes: ['id', 'modelo'] })
+            : [];
+        const modeloByCosto = new Map(costos.map((c) => [c.id, c.modelo]));
+
         const buffer = await renderPlanificadorPdf({
             brief: brief.toJSON(),
             secciones: secciones.map((s) => ({
                 tipo: s.tipo,
-                lineas: s.lineas.map((l) => l.toJSON()),
+                lineas: s.lineas.map((l) => ({ ...l.toJSON(), modelo: modeloByCosto.get(l.id_costo) || null })),
                 summaryByCosto: new Map(s.summaries.map((sm) => [sm.id_costo, sm.summary_meses])),
             })),
             objetivosById,
