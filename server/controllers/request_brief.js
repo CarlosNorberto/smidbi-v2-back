@@ -1,4 +1,5 @@
 const md = require('../models');
+const { notifyProceso } = require('../services/whatsappNotificationService');
 const { getLatestByBriefIds, checkCanInvalidate, deleteProposals, removeFiles } = require('./planificador/proposal_service');
 
 const getAll = async (req, res) => {
@@ -281,6 +282,9 @@ const createPublic = async (req, res) => {
             reviewed: false,
             fecha_creacion: new Date(),
         });
+        // Aviso por WhatsApp a los números suscritos al proceso. No se espera ni puede romper la respuesta
+        // al cliente: notifyProceso no lanza errores y deja los fallos en el log.
+        notifyProceso('nuevo_brief', { brief: created });
         res.status(201).json({ message: 'Solicitud recibida', id: created.id });
     } catch (error) {
         res.status(500).json({ message: 'No se pudo guardar su solicitud. Intente nuevamente en unos minutos.' });
