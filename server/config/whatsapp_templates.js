@@ -11,12 +11,13 @@ const { buildBriefCode } = require('../utils/briefLink');
 const LANGUAGE_CODE = process.env.WHATSAPP_TEMPLATE_LANG || 'es';
 
 const TEMPLATES = {
-    // Plantilla "brief_recibido": botón con URL https://<front>/brief/view/{{1}}
+    // Plantilla "brief_recibido": "Se recibió el formulario brief del cliente {{1}} y ya está disponible en el
+    // sistema." + botón con URL https://<front>/brief/view/{{1}}
     nuevo_brief: {
         name: 'brief_recibido',
         languageCode: LANGUAGE_CODE,
         build: ({ brief }) => ({
-            bodyParams: [brief.nombre_empresa, brief.nombre_campana],
+            bodyParams: [brief.nombre_empresa],
             buttonParam: buildBriefCode(brief.id),
         }),
     },
