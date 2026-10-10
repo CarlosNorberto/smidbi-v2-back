@@ -1,5 +1,6 @@
 const md = require('../models');
 const { notifyProceso } = require('../services/whatsappNotificationService');
+const { verifyBriefCode } = require('../utils/briefLink');
 const { getLatestByBriefIds, checkCanInvalidate, deleteProposals, removeFiles } = require('./planificador/proposal_service');
 
 const getAll = async (req, res) => {
@@ -291,10 +292,36 @@ const createPublic = async (req, res) => {
     }
 };
 
+// Campos del brief que ve quien abre el link firmado (botón de la plantilla de WhatsApp, sin login).
+// Solo lo que llenó el cliente: nunca la estrategia, los comentarios internos, la calificación ni la propuesta.
+const PUBLIC_VIEW_FIELDS = [
+    'id', 'nombre_empresa', 'nombre_campana', 'responsable', 'mail', 'telefono', 'descripcion', 'slogan',
+    'competencia_directa', 'url', 'url_destino', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_twitter',
+    'url_linkedin', 'url_descarga_app', 'recursos_graficos', 'recursos_audiovisuales', 'fecha_inicio', 'fecha_fin',
+    'presupuesto', 'moneda', 'geolocalizacion', 'geolocalizacion_ciudad', 'segmentacion_edad', 'segmentacion_sexo',
+    'intereses', 'medios', 'funnel_stage_1', 'funnel_stage_2', 'funnel_stage_3', 'funnel_stage_4', 'fecha_creacion',
+];
+
+// GET /public/request_briefs/view/:code — brief de solo lectura para quien tiene el link firmado.
+// Si el código no es válido (formato o firma) o el brief no existe responde lo mismo, sin dar pistas.
+const getPublicView = async (req, res) => {
+    const notFound = () => res.status(404).json({ message: 'Este link no es válido o ya no está disponible.' });
+    try {
+        const id = verifyBriefCode(req.params.code);
+        if (!id) return notFound();
+        const brief = await md.request_brief.findByPk(id, { attributes: PUBLIC_VIEW_FIELDS });
+        if (!brief) return notFound();
+        res.status(200).json(brief);
+    } catch (error) {
+        res.status(500).json({ message: 'No se pudo cargar el brief. Intente nuevamente en unos minutos.' });
+    }
+};
+
 module.exports = {
     getAll,
     getById,
     duplicate,
     updateStrategy,
     createPublic,
+    getPublicView,
 };

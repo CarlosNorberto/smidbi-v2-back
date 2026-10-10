@@ -66,6 +66,12 @@ module.exports = (app) => {
         rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Ha enviado demasiadas solicitudes. Intente nuevamente más tarde.' }),
         requestBrief.createPublic
     );
+    // Brief de solo lectura para el link firmado de la plantilla de WhatsApp (sin login; ver utils/briefLink.js).
+    app.get(
+        process.env.PREFIX_API + '/public/request_briefs/view/:code',
+        rateLimit({ windowMs: 60 * 60 * 1000, max: 120, message: 'Demasiadas consultas. Intente nuevamente más tarde.' }),
+        requestBrief.getPublicView
+    );
 
     // CALIFICACIÓN DE BRIEF (q1-q4 / RATE CARD + imágenes de respaldo)
     app.get(process.env.PREFIX_API + '/qualify_briefs/by_brief/:id_brief', sessionAuth, qualifyBrief.getByBriefId);
