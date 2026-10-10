@@ -21,9 +21,16 @@ const sign = (id) => crypto
 
 const buildBriefCode = (id) => `${sign(id)}-${id}`;
 
+// Si la URL del botón de la plantilla quedó registrada en Meta con el texto "{{1}}" como parte de la URL
+// fija (en vez de como variable), Meta lo deja escrito tal cual y agrega el código después:
+//     /brief/view/{{1}}<firma>-<id>
+// Se ignora ese prefijo para que esos links (ya enviados) funcionen igual.
+const TEMPLATE_PLACEHOLDER_PREFIX = /^(?:\{\{\s*\d+\s*\}\})+/;
+
 // Devuelve el ID del brief si el código es válido, o null si no (formato o firma incorrectos).
 const verifyBriefCode = (code) => {
-    const match = /^([a-f0-9]{24})-(\d{1,10})$/.exec(String(code ?? ''));
+    const clean = String(code ?? '').trim().replace(TEMPLATE_PLACEHOLDER_PREFIX, '');
+    const match = /^([a-f0-9]{24})-(\d{1,10})$/.exec(clean);
     if (!match) return null;
     const [, signature, id] = match;
     const expected = Buffer.from(sign(id));
