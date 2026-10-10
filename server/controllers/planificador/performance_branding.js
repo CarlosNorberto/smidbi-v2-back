@@ -1,4 +1,5 @@
 const md = require('../../models');
+const { findLatest, checkCanInvalidate, deleteProposals, removeFiles } = require('./proposal_service');
 
 // Calcula el objetivo (alcance/clics/views para CPC_CPV, impresiones para CPM)
 // a partir de la inversión y el costo unitario. Se recalcula siempre en el
@@ -33,11 +34,47 @@ const defaultSummaryMeses = () => ([
     },
 ]);
 
+// Forma canónica de una línea (+ su distribución semanal) para saber si la cotización
+// realmente cambió respecto a lo ya guardado. Se compara por id_costo, sin importar el
+// orden, y los números se normalizan (la base devuelve los decimales como texto).
+const canonicalSummary = (summaryMeses) => (Array.isArray(summaryMeses) ? summaryMeses : []).map((m) => ({
+    mes: Number(m.mes),
+    semanas: (Array.isArray(m.semanas) ? m.semanas : []).map((s) => Number(s.valor) || 0),
+}));
+
+const canonicalLinea = (linea, summaryMeses) => ({
+    id_plataforma: Number(linea.id_plataforma),
+    nombre: String(linea.nombre),
+    id_costo: Number(linea.id_costo),
+    costo: Number(linea.costo),
+    inversion: Number(linea.inversion) || 0,
+    kpi_principal: Number(linea.kpi_principal) || 0,
+    kpi_secundario: Number(linea.kpi_secundario) || 0,
+    frecuencia: Number(linea.frecuencia) || 0,
+    summary: canonicalSummary(summaryMeses),
+});
+
+const canonicalList = (items) => JSON.stringify(items.sort((a, b) => a.id_costo - b.id_costo));
+
+const cotizacionCambio = async ({ id_brief, grupo, tipo, lineas }) => {
+    const [existentes, summaries] = await Promise.all([
+        md.performance_branding.findAll({ where: { id_brief, grupo, tipo } }),
+        md.summary.findAll({ where: { id_brief, grupo, tipo } }),
+    ]);
+    const summaryByCosto = new Map(summaries.map((s) => [s.id_costo, s.summary_meses]));
+
+    const actuales = existentes.map((e) => canonicalLinea(e, summaryByCosto.get(e.id_costo)));
+    // Si el front no manda la distribución de una línea, se considera sin cambios en ese
+    // aspecto (el servidor le pondría la distribución por defecto solo si es una línea nueva).
+    const nuevas = lineas.map((l) => canonicalLinea(l, l.summary_meses ?? summaryByCosto.get(Number(l.id_costo))));
+    return canonicalList(actuales) !== canonicalList(nuevas);
+};
+
 const getByBrief = async (req, res) => {
     try {
         const { id_brief, grupo } = req.params;
 
-        const [costos, lineas, summaries] = await Promise.all([
+        const [costos, lineas, summaries, propuestaRow] = await Promise.all([
             // Catálogo seleccionable: solo costos de plataformas activas. Una
             // plataforma nunca se borra (solo se desactiva, ver migración de la FK),
             // así que esto simplemente oculta las que el admin desactivó — las líneas
@@ -53,6 +90,7 @@ const getByBrief = async (req, res) => {
                 order: [['id_plataforma', 'ASC']],
             }),
             md.summary.findAll({ where: { id_brief, grupo } }),
+            findLatest(id_brief),
         ]);
 
         const summaryByTipoAndCosto = new Map();
@@ -65,7 +103,19 @@ const getByBrief = async (req, res) => {
             summary_meses: summaryByTipoAndCosto.get(`${linea.tipo}_${linea.id_costo}`) || null,
         }));
 
-        res.status(200).json({ costos, lineas: lineasConSummary });
+        // Estado de la propuesta (PDF) vigente del brief: null si todavía no se generó (o si
+        // se modificó la cotización desde la última vez). `token` solo lo ve el personal.
+        const propuesta = propuestaRow
+            ? {
+                token: propuestaRow.token,
+                tipos: propuestaRow.tipos,
+                activo: propuestaRow.activo,
+                respuesta: propuestaRow.respuesta,
+                fecha_creacion: propuestaRow.fecha_creacion,
+            }
+            : null;
+
+        res.status(200).json({ costos, lineas: lineasConSummary, propuesta });
     } catch (error) {
         res.status(500).json({ message: `Error al obtener la cotización: ${error.message}` });
     }
@@ -101,7 +151,26 @@ const saveBulk = async (req, res) => {
         }
     }
 
+    // Si la cotización no cambió, no se toca nada: ni las filas ni el PDF/link vigentes.
+    try {
+        if (!(await cotizacionCambio({ id_brief, grupo, tipo, lineas }))) {
+            return res.status(200).json({ message: 'Sin cambios en la cotización', changed: false, proposal_invalidated: false });
+        }
+
+        // Hay cambios: si el cliente ya aceptó la propuesta, solo un admin/superadmin con
+        // confirmación explícita puede continuar (se pierde el registro de lo aceptado).
+        const blocked = await checkCanInvalidate({
+            id_brief,
+            user: req.user,
+            confirmEditAccepted: req.body.confirm_edit_accepted === true,
+        });
+        if (blocked) return res.status(blocked.status).json(blocked.body);
+    } catch (error) {
+        return res.status(500).json({ message: `Error al guardar la cotización: ${error.message}` });
+    }
+
     const t = await md.sequelize.transaction();
+    let oldFiles = [];
     try {
         await md.performance_branding.destroy({ where: { id_brief, grupo, tipo }, transaction: t });
         await md.summary.destroy({ where: { id_brief, grupo, tipo }, transaction: t });
@@ -141,16 +210,19 @@ const saveBulk = async (req, res) => {
             await md.summary.bulkCreate(summaryRows, { transaction: t });
         }
 
-        // Cualquier cambio en la cotización invalida el PDF ya generado (si existe).
-        if (md.pdf_planificador) {
-            await md.pdf_planificador.update(
-                { activo: false },
-                { where: { id_brief, activo: true }, transaction: t }
-            );
-        }
+        // Cualquier cambio en la cotización invalida el PDF ya generado (si existe): se
+        // borra su fila y su archivo, y el link que se envió al cliente deja de funcionar.
+        // El siguiente "Generar PDF" crea uno nuevo.
+        oldFiles = await deleteProposals(id_brief, t);
 
         await t.commit();
-        res.status(200).json({ message: 'Cotización guardada correctamente', data: created });
+        removeFiles(oldFiles);
+        res.status(200).json({
+            message: 'Cotización guardada correctamente',
+            changed: true,
+            proposal_invalidated: oldFiles.length > 0,
+            data: created,
+        });
     } catch (error) {
         await t.rollback();
         res.status(500).json({ message: `Error al guardar la cotización: ${error.message}` });

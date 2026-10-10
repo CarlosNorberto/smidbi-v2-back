@@ -4,20 +4,49 @@ const path = require('path');
 const crypto = require('crypto');
 const md = require('../../models');
 const { renderPlanificadorPdf } = require('./pdf_template');
+const { UPLOADS_PATH, findLatest, deleteProposals, removeFiles } = require('./proposal_service');
 
-// Carpeta compartida con el backend antiguo — ver LEGACY_PDF_PLANIFICADOR_UPLOADS_PATH
-// en .env (misma tabla `pdf_planificador`, misma carpeta física en ambos sistemas).
-const UPLOADS_PATH = process.env.LEGACY_PDF_PLANIFICADOR_UPLOADS_PATH
-    || path.join(__dirname, '..', '..', 'uploads', 'pdf_planificador');
+const TIPOS_VALIDOS = ['CPC_CPV', 'CPM'];
 
+const sendPdf = (res, id_brief, buffer, token) => {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=propuesta_brief_${id_brief}.pdf`);
+    if (token) res.setHeader('X-Proposal-Token', token);
+    res.send(buffer);
+};
+
+// "Generar PDF" = revisar el PDF de la propuesta. Solo se crea una fila nueva en
+// pdf_planificador (y un token/link nuevo) cuando no hay un PDF vigente para la
+// cotización actual: la primera vez, o después de modificarla (guardar cambios borra
+// la fila anterior — ver proposal_service). Si ya hay uno vigente con los mismos
+// tipos, se devuelve tal cual está guardado: es exactamente lo que ve el cliente.
+// Una propuesta ACEPTADA se devuelve siempre tal cual (es lo que el cliente aceptó).
 const generate = async (req, res) => {
     try {
         const { id_brief } = req.params;
-        const tipos = Array.isArray(req.body.tipos) ? req.body.tipos.filter(Boolean) : [];
+        const tipos = [...new Set(Array.isArray(req.body.tipos) ? req.body.tipos.filter((t) => TIPOS_VALIDOS.includes(t)) : [])].sort();
 
         if (tipos.length === 0) {
             return res.status(400).json({ message: 'Debe seleccionar al menos un tipo (CPC/CPV/CPE o CPM).' });
         }
+        const tiposKey = tipos.join(',');
+
+        const existing = await findLatest(id_brief);
+        // `regenerateInto`: la fila ya existe pero su archivo se perdió del disco; se
+        // vuelve a renderizar y se actualiza esa misma fila (no se crea otra).
+        let regenerateInto = null;
+        if (existing) {
+            const reusable = existing.respuesta === true || (existing.token && existing.tipos === tiposKey);
+            if (reusable) {
+                const filePath = path.join(UPLOADS_PATH, path.basename(existing.pdf));
+                if (fs.existsSync(filePath)) {
+                    return sendPdf(res, id_brief, fs.readFileSync(filePath), existing.token);
+                }
+                regenerateInto = existing;
+            }
+        }
+        // Al regenerar una propuesta aceptada se respetan los tipos con los que se aceptó.
+        const tiposToRender = regenerateInto?.tipos ? regenerateInto.tipos.split(',') : tipos;
 
         // El grupo NUNCA se toma del cliente: se deriva siempre de la
         // calificación vigente del brief (misma fuente que usa la grilla de
@@ -37,12 +66,12 @@ const generate = async (req, res) => {
         }
 
         const [lineasPorTipo, summariesPorTipo, objetivos] = await Promise.all([
-            Promise.all(tipos.map((tipo) => md.performance_branding.findAll({
+            Promise.all(tiposToRender.map((tipo) => md.performance_branding.findAll({
                 where: { id_brief, grupo, tipo, activo: true },
                 include: [{ model: md.plataformas, as: 'plataforma', attributes: ['id', 'plataforma'], required: false }],
                 order: [['id_plataforma', 'ASC'], ['id', 'ASC']],
             }))),
-            Promise.all(tipos.map((tipo) => md.summary.findAll({ where: { id_brief, grupo, tipo } }))),
+            Promise.all(tiposToRender.map((tipo) => md.summary.findAll({ where: { id_brief, grupo, tipo } }))),
             md.objetivos.findAll({ attributes: ['id', 'objetivo'] }),
         ]);
 
@@ -50,7 +79,7 @@ const generate = async (req, res) => {
         // simplemente no entra al PDF (no se aborta todo el documento por eso) —
         // solo falla si NINGUNO de los tipos seleccionados tiene datos.
         // CPM siempre va primero en el PDF, luego CPC/CPV/CPE.
-        const secciones = tipos
+        const secciones = tiposToRender
             .map((tipo, i) => ({ tipo, lineas: lineasPorTipo[i], summaries: summariesPorTipo[i] }))
             .filter((s) => s.lineas.length > 0)
             .sort((a, b) => (b.tipo === 'CPM') - (a.tipo === 'CPM'));
@@ -99,25 +128,40 @@ const generate = async (req, res) => {
         }
         fs.writeFileSync(path.join(UPLOADS_PATH, filename), buffer);
 
+        if (regenerateInto) {
+            const previousFile = regenerateInto.pdf;
+            await regenerateInto.update({ pdf: filename });
+            removeFiles([previousFile]);
+            return sendPdf(res, id_brief, buffer, regenerateInto.token);
+        }
+
         // Token de la vista pública (/propuesta/:token) donde el cliente ve este PDF y
         // acepta/rechaza — random, no el nombre del archivo (que es solo un timestamp
-        // adivinable). Al regenerar el PDF, el link anterior queda inválido (esa fila
-        // pasa a activo:false), igual criterio que ya existía para el resto del flujo.
+        // adivinable). Solo hay una fila por brief: las anteriores (obsoletas) se borran
+        // junto con su archivo, y sus links dejan de funcionar.
         const token = crypto.randomBytes(32).toString('hex');
 
-        await md.pdf_planificador.update({ activo: false }, { where: { id_brief, activo: true } });
-        await md.pdf_planificador.create({
-            id_brief,
-            usuario_creacion: req.user.id,
-            pdf: filename,
-            token,
-            activo: true,
-        });
+        const t = await md.sequelize.transaction();
+        let oldFiles = [];
+        try {
+            oldFiles = await deleteProposals(id_brief, t);
+            await md.pdf_planificador.create({
+                id_brief,
+                usuario_creacion: req.user.id,
+                pdf: filename,
+                token,
+                tipos: tiposKey,
+                activo: true,
+            }, { transaction: t });
+            await t.commit();
+        } catch (error) {
+            await t.rollback();
+            removeFiles([filename]);
+            throw error;
+        }
+        removeFiles(oldFiles);
 
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=propuesta_brief_${id_brief}.pdf`);
-        res.setHeader('X-Proposal-Token', token);
-        res.send(buffer);
+        sendPdf(res, id_brief, buffer, token);
     } catch (error) {
         res.status(500).json({ message: `Error al generar el PDF: ${error.message}` });
     }

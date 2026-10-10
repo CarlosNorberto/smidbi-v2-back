@@ -1,4 +1,5 @@
 const { sessionAuth, requireRole, clientSessionAuth } = require('../auth/middleware');
+const { rateLimit } = require('../auth/rate_limit');
 const usuarios = require('../controllers/usuarios');
 const utilities = require('../controllers/utilities');
 const systemSettings = require('../controllers/system_settings');
@@ -58,6 +59,12 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/request_briefs/one/:id', sessionAuth, requestBrief.getById);
     app.post(process.env.PREFIX_API + '/request_briefs/:id/duplicate', sessionAuth, requestBrief.duplicate);
     app.put(process.env.PREFIX_API + '/request_briefs/:id/strategy', sessionAuth, requestBrief.updateStrategy);
+    // Formulario público de brief (sin login): máx. 5 envíos por hora por IP.
+    app.post(
+        process.env.PREFIX_API + '/public/request_briefs',
+        rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Ha enviado demasiadas solicitudes. Intente nuevamente más tarde.' }),
+        requestBrief.createPublic
+    );
 
     // CALIFICACIÓN DE BRIEF (q1-q4 / RATE CARD + imágenes de respaldo)
     app.get(process.env.PREFIX_API + '/qualify_briefs/by_brief/:id_brief', sessionAuth, qualifyBrief.getByBriefId);

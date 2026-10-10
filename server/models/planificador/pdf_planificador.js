@@ -19,6 +19,8 @@ module.exports = (sequelize, DataTypes) => {
         // adivinable ya que es solo un timestamp). allowNull porque filas viejas/de la
         // app antigua no lo tienen.
         token: { type: DataTypes.STRING(64), allowNull: true, unique: true },
+        // Tipos incluidos en el PDF ('CPC_CPV,CPM', ordenados). null en filas de la app antigua.
+        tipos: { type: DataTypes.STRING(50), allowNull: true },
     }, {
         schema: 'public',
         timestamps: false,
