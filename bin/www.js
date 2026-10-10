@@ -1,5 +1,12 @@
 const dotenv = require('dotenv');
 dotenv.config();
+
+// ZONA HORARIA: la base guarda las fechas como hora local de Bolivia (columnas "timestamp without time zone",
+// igual que la app antigua) y Bolivia está en UTC-4 todo el año. El proceso debe correr en esa zona para que
+// las fechas se LEAN igual que se ESCRIBEN; junto con "timezone": "-04:00" en server/config/config.json
+// (que fija cómo Sequelize ESCRIBE las fechas), evita que se vean con horas de diferencia. No lo quite ni
+// dependa de la zona del servidor.
+process.env.TZ = 'America/La_Paz';
 const port = process.env.PORT;
 const app = require('../app');
 

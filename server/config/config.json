@@ -5,6 +5,7 @@
     "database": "smidbi_backup_1",
     "host": "localhost",
     "dialect": "postgres",
+    "timezone": "-04:00",
     "pool": {
       "max": 3,
       "min": 0,
@@ -18,6 +19,7 @@
     "database": "smidbi",
     "host": "165.227.27.86",
     "dialect": "postgres",
+    "timezone": "-04:00",
     "pool": {
       "max": 3,
       "min": 0,
