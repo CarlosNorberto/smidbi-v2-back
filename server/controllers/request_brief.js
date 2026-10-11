@@ -165,27 +165,20 @@ const MAX_LENGTHS = {
     url_twitter: 200,
     url_linkedin: 200,
     url_descarga_app: 200,
-    competencia_directa: 200,
+    competencia_directa: 3000,
+    publico_objetivo: 3000,
+    kpis: 3000,
+    entregables: 3000,
 };
-const REQUIRED_TEXT = ['nombre_empresa', 'responsable', 'nombre_campana', 'mail', 'telefono', 'descripcion'];
+const REQUIRED_TEXT = ['nombre_empresa', 'responsable', 'nombre_campana', 'mail', 'telefono', 'descripcion', 'publico_objetivo', 'slogan'];
 const OPTIONAL_TEXT = [
-    'url', 'url_destino', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_twitter',
-    'url_linkedin', 'url_descarga_app', 'competencia_directa', 'slogan',
+    'url', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_linkedin', 'competencia_directa', 'kpis', 'entregables',
 ];
-const PAISES_VALIDOS = ['Bolivia'];
 const MONEDAS_VALIDAS = ['$us.', 'Bs.'];
-const ETAPAS_VALIDAS = [2, 3, 4];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const cleanText = (value) => (typeof value === 'string' ? value.trim() : '');
-
-const cleanStringArray = (value, { maxItems = 60, maxLength = 100 } = {}) => {
-    if (!Array.isArray(value)) return null;
-    const items = value.map(cleanText).filter(Boolean);
-    if (items.length > maxItems || items.some((item) => item.length > maxLength)) return null;
-    return [...new Set(items)];
-};
 
 // Valida y normaliza el body del formulario público. Devuelve { data } o { error }.
 const buildPublicBriefData = (body) => {
@@ -209,7 +202,7 @@ const buildPublicBriefData = (body) => {
         }
         data[field] = value || null;
     }
-    if (data.slogan && data.slogan.length > 1000) return { error: 'El eslogan es demasiado largo.' };
+    if (data.slogan.length > 3000) return { error: 'El mensaje clave es demasiado largo.' };
 
     if (typeof body.recursos_graficos !== 'boolean' || typeof body.recursos_audiovisuales !== 'boolean') {
         return { error: 'Indique si cuenta con recursos gráficos y audiovisuales.' };
@@ -232,33 +225,19 @@ const buildPublicBriefData = (body) => {
     if (!MONEDAS_VALIDAS.includes(body.moneda)) return { error: 'La moneda no es válida.' };
     data.moneda = body.moneda;
 
-    if (!PAISES_VALIDOS.includes(body.pais)) return { error: 'El país no es válido.' };
-    data.geolocalizacion = body.pais;
-
-    const ciudades = cleanStringArray(body.ciudades);
-    const edades = cleanStringArray(body.edades);
-    const sexos = cleanStringArray(body.sexos);
-    const medios = cleanStringArray(body.medios);
-    const intereses = cleanStringArray(body.intereses ?? []);
-    if (!ciudades?.length) return { error: 'Seleccione al menos una ciudad.' };
-    if (!edades?.length) return { error: 'Seleccione al menos un rango de edad.' };
-    if (!sexos?.length) return { error: 'Seleccione al menos un sexo.' };
-    if (!medios?.length) return { error: 'Seleccione al menos un medio.' };
-    if (!intereses) return { error: 'Los intereses no son válidos.' };
-    data.geolocalizacion_ciudad = ciudades;
-    data.segmentacion_edad = edades;
-    data.segmentacion_sexo = sexos;
-    data.medios = medios;
-    data.intereses = intereses;
-
-    const etapas = Array.isArray(body.embudo) ? body.embudo.map(Number) : [];
-    if (etapas.length === 0 || etapas.some((e) => !ETAPAS_VALIDAS.includes(e))) {
-        return { error: 'Seleccione al menos una etapa del embudo.' };
-    }
+    // El formulario simplificado ya no pregunta segmentación ni etapas del embudo (el equipo las completa al
+    // armar la estrategia, desde el detalle del brief). Las columnas de la base son NOT NULL (tabla compartida
+    // con la app antigua), así que se guardan vacías / en falso.
+    data.geolocalizacion = 'Bolivia';
+    data.geolocalizacion_ciudad = [];
+    data.segmentacion_edad = [];
+    data.segmentacion_sexo = [];
+    data.intereses = [];
+    data.medios = [];
     data.funnel_stage_1 = false;
-    data.funnel_stage_2 = etapas.includes(2);
-    data.funnel_stage_3 = etapas.includes(3);
-    data.funnel_stage_4 = etapas.includes(4);
+    data.funnel_stage_2 = false;
+    data.funnel_stage_3 = false;
+    data.funnel_stage_4 = false;
 
     const comentarios = cleanText(body.comentarios);
     if (comentarios.length > 5000) return { error: 'Los detalles adicionales son demasiado largos.' };
@@ -296,7 +275,7 @@ const createPublic = async (req, res) => {
 // Solo lo que llenó el cliente: nunca la estrategia, los comentarios internos, la calificación ni la propuesta.
 const PUBLIC_VIEW_FIELDS = [
     'id', 'nombre_empresa', 'nombre_campana', 'responsable', 'mail', 'telefono', 'descripcion', 'slogan',
-    'competencia_directa', 'url', 'url_destino', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_twitter',
+    'competencia_directa', 'publico_objetivo', 'kpis', 'entregables', 'comments', 'url', 'url_destino', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_twitter',
     'url_linkedin', 'url_descarga_app', 'recursos_graficos', 'recursos_audiovisuales', 'fecha_inicio', 'fecha_fin',
     'presupuesto', 'moneda', 'geolocalizacion', 'geolocalizacion_ciudad', 'segmentacion_edad', 'segmentacion_sexo',
     'intereses', 'medios', 'funnel_stage_1', 'funnel_stage_2', 'funnel_stage_3', 'funnel_stage_4', 'fecha_creacion',

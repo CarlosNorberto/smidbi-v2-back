@@ -45,6 +45,9 @@ module.exports = (sequelize, DataTypes) => {
         comments: DataTypes.TEXT,
         copia_from: DataTypes.INTEGER,
         estrategia: DataTypes.TEXT,
+        publico_objetivo: DataTypes.TEXT,
+        kpis: DataTypes.TEXT,
+        entregables: DataTypes.TEXT,
     }, {
         schema: 'public',
         timestamps: false,
