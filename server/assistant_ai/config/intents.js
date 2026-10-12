@@ -34,6 +34,13 @@ const INTENTS = {
         keywords: 'campañas activas, campañas vigentes, listado de campañas',
         neutral_question: 'Dame las campañas activas de este cliente'
     },
+    active_clients: {
+        needs: [],
+        tool: 'get_active_clients',
+        description: 'Listado o reporte de los clientes (empresas) activos, con sus campañas vigentes y presupuesto. No requiere un cliente concreto.',
+        keywords: 'clientes activos, reporte de clientes, listado de clientes, mis clientes, qué clientes tenemos',
+        neutral_question: 'Dame el listado de clientes activos'
+    },
     low_performance: {
         needs: [],
         tool: 'get_low_performance',
@@ -51,7 +58,7 @@ const INTENTS = {
     full_report: {
         needs: ['company', 'campaign'],
         tool: 'generate_campaign_report',
-        description: 'Informe completo de una campaña',
+        description: 'Informe completo de UNA campaña concreta (requiere nombre de campaña). No usar para reportes de clientes en general.',
         keywords: 'reporte, informe, generar, documento',
         neutral_question: 'Genera el reporte de esta campaña'
     },
