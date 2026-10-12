@@ -87,6 +87,7 @@ require('./server/routes/lead_manager')(app);
 require('./server/routes/tasks')(app);
 require('./server/routes/contract manager')(app);
 require('./server/routes/planificador')(app);
+require('./server/routes/reports')(app);
 require('./server/assistant_ai/router/assistant_ai.router')(app);
 app.use(require('./server/routes/whatsappWebhook')); // WhatsApp Webhook
 
