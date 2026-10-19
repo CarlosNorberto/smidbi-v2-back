@@ -21,3 +21,36 @@ El objetivo de este sistema nuevo (backend + frontend) es **mejorar la experienc
   ...secciones.map((s) => buildCostosPage(brief, s.tipo, s.lineas, objetivosById)),
   ```
   (antes de `buildGlosarioPage(secciones)`, mismo lugar donde estaba).
+
+## Chatbot RAG del home — PENDIENTE (solo diseño acordado, nada implementado)
+
+Idea: un chatbot en el home (público) que responde solo con la documentación que un admin carga desde el panel (PDF/xlsx). Primera vez "no tengo información al respecto"; tras cargar la documentación, responde bien. Se dejó en pausa a pedido del usuario; este es el contexto para retomarlo sin repetir la investigación.
+
+**Flujo**
+- Carga (admin): subir archivo → extraer texto (PDF: texto por página; xlsx: cada fila convertida a una frase tipo "Plan Básico: precio 100...") → partir en fragmentos de ~500–800 palabras con solapamiento → embeddings de OpenAI → guardar texto + vector + documento de origen.
+- Pregunta (home): embedding de la pregunta → buscar fragmentos más parecidos → pasar solo esos al modelo con la instrucción "responde únicamente con este contexto; si no alcanza, di que no tienes información". Si ningún fragmento supera un umbral de similitud, ni se llama al modelo: se responde "no tengo información al respecto" (evita inventar).
+- Borrar un documento borra sus fragmentos; no hay reentrenamiento, el cambio es inmediato.
+
+**Restricciones del entorno (por qué las decisiones)**
+- Producción: **PostgreSQL 10.22 en Ubuntu 18.04** (ambos sin soporte, compartido con el backend legacy). `pgvector` exige PG ≥ 13, así que **no se puede instalar en producción**; no se recomienda actualizar ese Postgres. Local es PG 17.6 sin `pgvector` instalado.
+- Producción corre **Node 16** → librerías compatibles con Node 16 (p. ej. `pdf-parse`; `exceljs` y `multer` ya están). `openai` está fijado en 4.x por esto (ver DEPLOY.md); 4.x soporta embeddings.
+- La API key de OpenAI vive en `system_settings` (módulo `assistant_ai`) vía `server/assistant_ai/services/openai.service.js`; reutilizar ese cliente.
+
+**Decisión acordada (opción A, pendiente de confirmación final del usuario)**
+- Vectores en una tabla normal de Postgres (arreglo/JSON) y similitud calculada en Node. Para que sea rápido: usar el parámetro `dimensions` de `text-embedding-3-small` (~512) y cargar los vectores una vez en memoria (Float32Array). Alcanza para una empresa mediana (~5.000–20.000 fragmentos).
+- Acceder a los vectores detrás de una capa pequeña ("vector store") para poder pasar luego a la opción B sin tocar el resto: un **Postgres 16 con `pgvector` en Docker**, aislado del legacy (segunda conexión Sequelize). La opción C (actualizar el Postgres 10) se descartó.
+
+**Alcance y seguridad**
+- Gestionan documentos solo `admin` y `superadmin` (`requireRole('admin','superadmin')`).
+- Cada documento lleva un campo de **audiencia** (`publico` ahora; `clientes` / `interno` después). El chat filtra por audiencia **antes** de buscar, para que un visitante nunca reciba fragmentos de documentos de clientes. Hoy el chat es solo para visitantes; la idea es extenderlo luego a clientes logueados (lenguaje natural en vez de intents fijos del consultor IA).
+- Es un endpoint **público**: todo lo cargado es consultable por cualquiera → advertirlo en la pantalla de carga ("no subir información interna/confidencial"). Debe estar **aislado del consultor IA** (`assistant_ai`): sin acceso a campañas, clientes ni presupuestos, solo a los documentos. Requiere rate limit por IP (`server/auth/rate_limit.js` ya existe), tope de longitud de pregunta (costo de OpenAI) y mitigación de prompt injection desde el contenido de los documentos.
+
+**OCR: se deja para después**
+- PDF escaneado = imágenes sin texto; la primera versión debe **detectar un PDF sin texto y avisar** al usuario en vez de aceptarlo en silencio.
+- Agregar OCR implica: convertir páginas a imagen (herramientas del SO como `poppler`), leerlas con un modelo de visión de OpenAI o Tesseract (costo/calidad variable en tablas y manuscrito) y procesar en segundo plano con estado "procesando" (un escaneo grande tarda minutos). Solo se justifica si la documentación real resulta ser escaneada.
+
+**Plan de trabajo previsto**
+1. Backend: migración (documentos + fragmentos con audiencia), carga/extracción PDF y xlsx, embeddings, búsqueda, endpoint público de chat con rate limit.
+2. Frontend (`smidbi-vite-front`): sección en el admin para subir/listar/borrar documentos (con vista de prueba de pregunta que muestre qué fragmentos se usaron, y opcionalmente historial de preguntas sin respuesta) y widget de chat en el home.
+
+**Pendiente de confirmar al retomar:** que el usuario aprueba la opción A, y el tamaño real de la documentación.
