@@ -23,4 +23,18 @@ const TEMPLATES = {
     },
 };
 
+// Plantilla "tarea_asignada" (aviso a los responsables de una tarea de /tasks). Texto sugerido para registrarla en Meta:
+//   "Se te asignó la tarea {{1}} en el sistema. Puedes ver el detalle en el botón de abajo."
+// + botón "Ver tarea" con URL dinámica:  https://<FRONT_URL>/admin/tasks/card/{{1}}   ({{1}} = id de la tarea)
+// Quien abre el link debe iniciar sesión (es una pantalla interna); después de entrar, el sistema lo lleva a la tarea.
+// No va ligada a un proceso con destinatarios fijos: se envía al teléfono de cada responsable (ver notifyUsuarios).
+TEMPLATES.tarea_asignada = {
+    name: 'tarea_asignada',
+    languageCode: LANGUAGE_CODE,
+    build: ({ tarea, cardId }) => ({
+        bodyParams: [tarea],
+        buttonParam: String(cardId),
+    }),
+};
+
 module.exports = { TEMPLATES };

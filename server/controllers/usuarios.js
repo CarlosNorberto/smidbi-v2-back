@@ -36,7 +36,7 @@ const getAll = async (req, res) => {
 
 const saveUpdate = async (req, res) => {
     try {
-        let { id, nombre, usuario, email, time_zone, password, activo, role_id } = req.body;
+        let { id, nombre, usuario, email, time_zone, password, activo, role_id, phone } = req.body;
         let usuarioRecord;
         if(!nombre || !usuario || !email) {
             return  res.status(400).json({ message: 'Nombre, usuario y email son campos obligatorios.' });
@@ -51,12 +51,20 @@ const saveUpdate = async (req, res) => {
         if (!role_id) {
             role_id = 2; // Asignar rol por defecto si no se proporciona
         }
+        // Teléfono (WhatsApp) para los avisos de tareas: se guarda como "+<código país><número>" o vacío.
+        if (phone !== undefined) {
+            const digits = String(phone ?? '').replace(/\D/g, '').replace(/^00/, '');
+            if (digits && !/^\d{8,15}$/.test(digits)) {
+                return res.status(400).json({ message: 'El teléfono no es válido: use el número con código de país (ej. +591 ...).' });
+            }
+            phone = digits ? `+${/^[67]\d{7}$/.test(digits) ? `591${digits}` : digits}` : null;
+        }
         if (usuarioRecord) {
             let usuario_modificacion = req.user ? req.user.id : null;
-            await usuarioRecord.update({ nombre, usuario, email, time_zone, password, activo, usuario_modificacion, role_id });
+            await usuarioRecord.update({ nombre, usuario, email, time_zone, password, activo, usuario_modificacion, role_id, ...(phone !== undefined && { phone }) });
         } else {
             let usuario_creacion = req.user ? req.user.id : null;
-            usuarioRecord = await md.usuarios.create({ nombre, usuario, email, time_zone, password, activo, usuario_creacion, role_id });
+            usuarioRecord = await md.usuarios.create({ nombre, usuario, email, time_zone, password, activo, usuario_creacion, role_id, phone });
         }
         res.status(200).json(usuarioRecord);
     } catch (error) {

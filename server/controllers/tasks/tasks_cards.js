@@ -1,5 +1,9 @@
 const md = require('../../models');
 const { getObjetivoLogrado, getExpirationStatus } = require('../../helps');
+const { notifyUsuarios } = require('../../services/whatsappNotificationService');
+
+// Listas del tablero (tasks_lists): 1 Pendientes, 2 En Proceso, 3 Terminado.
+const LIST_NAMES = { 1: 'Pendientes', 2: 'En Proceso', 3: 'Terminado' };
 
 const getById = async (req, res) => {
     try {
@@ -20,18 +24,18 @@ const getById = async (req, res) => {
                 {
                     model: md.tasks_ads,
                     as: 'ads',
-                    attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'seg_segmentations', 'seg_ages', 'seg_cities']
+                    attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'template', 'seg_segmentations', 'seg_ages', 'seg_cities']
                 },
                 {
                     model: md.reportes,
                     as: 'report',
-                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp'],
+                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp', 'objetivo_proyectado'],
                     include: [
                         {
                             model: md.campanas,
                             as: 'campana',
                             required: true,
-                            attributes: ['id', 'nombre'],
+                            attributes: ['id', 'nombre', 'moneda'],
                             include: [
                                 {
                                     model: md.categorias,
@@ -101,7 +105,15 @@ const save = async (req, res) => {
         body.exp_time_hour = 23;
         body.exp_time_minute = 59;
         
+        body.created_at = new Date();
+
         const newCard = await md.tasks_cards.create(body);
+        await md.tasks_activities.create({
+            card_id: newCard.id,
+            date_activity: new Date(),
+            activity_detail: `Creó la tarjeta ${newCard.name ?? ''}`.trim(),
+            responsible_id: req.user.id,
+        });
         res.status(201).json(newCard);
     } catch (error) {
         console.log(error);
@@ -140,11 +152,37 @@ const update = async (req, res) => {
             });
         }
 
-        const updateData = {
-            ...req.body,
-            completed: isCompleted,
-            date_completed: isCompleted ? new Date() : null,
-        };
+        const updateData = { ...req.body };
+        // Los tiempos los fija el servidor: no se aceptan del cliente.
+        delete updateData.created_at;
+        delete updateData.started_at;
+        delete updateData.last_notified_at;
+        delete updateData.completed;
+        delete updateData.date_completed;
+
+        // "Terminado" y su fecha solo cambian cuando la tarea cambia de columna: editar una tarea que ya está terminada
+        // (título, responsables, etc.) no debe mover su fecha de término.
+        const listChanged = list_id !== undefined && parseInt(list_id) !== card.list_id;
+        if (listChanged) {
+            updateData.completed = isCompleted;
+            updateData.date_completed = isCompleted ? new Date() : null;
+        }
+
+        // Al cambiar de columna se deja constancia (misma frase que la app anterior) y, la primera vez que la tarea
+        // pasa a "En Proceso", se marca el inicio (fin del tiempo de respuesta).
+        if (listChanged) {
+            const toList = parseInt(list_id);
+            // Si pasa directo a "Terminado" sin haber pasado por "En Proceso", el inicio es el momento de terminarla.
+            if ((toList === 2 || toList === 3) && !card.started_at) updateData.started_at = new Date();
+            if (LIST_NAMES[toList]) {
+                await md.tasks_activities.create({
+                    card_id: id,
+                    date_activity: new Date(),
+                    activity_detail: `Movió la tarjeta a ${LIST_NAMES[toList]}`,
+                    responsible_id: req.user.id,
+                });
+            }
+        }
 
         if (responsibles) {            
             const prevIds = new Set(card.responsibles.map(r => r.id));
@@ -329,6 +367,74 @@ const markAllAssignedAsRead = async (req, res) => {
     }
 };
 
+/**
+ * POST /tasks_cards/:id/notify — avisa por WhatsApp a TODOS los responsables de la tarea (los que estén
+ * seleccionados al momento de pulsar el botón). Es manual a propósito: el formulario de la tarea se autoguarda y
+ * avisar en cada cambio llenaría de mensajes a la gente.
+ */
+const hasValidPhone = (phone) => /^\d{8,15}$/.test(String(phone ?? '').replace(/\D/g, ''));
+
+/**
+ * GET /tasks_cards/:id/notify_preview — antes de enviar el aviso, dice cuáles responsables tienen teléfono. No expone
+ * los números, solo si cada uno tiene uno válido.
+ */
+const notifyPreview = async (req, res) => {
+    try {
+        const card = await md.tasks_cards.scope(['withResponsibles']).findByPk(req.params.id);
+        if (!card) return res.status(404).json({ message: 'No se encontró la tarjeta' });
+        const users = card.responsibles.length
+            ? await md.usuarios.findAll({ where: { id: card.responsibles.map((r) => r.id) }, attributes: ['id', 'nombre', 'phone'] })
+            : [];
+        res.status(200).json({
+            responsables: users.map((u) => ({ id: u.id, nombre: u.nombre, tiene_telefono: hasValidPhone(u.phone) })),
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'No se pudo revisar a los responsables' });
+    }
+};
+
+const notifyResponsibles = async (req, res) => {
+    try {
+        const card = await md.tasks_cards.scope(['withResponsibles', 'withReport']).findByPk(req.params.id);
+        if (!card) return res.status(404).json({ message: 'No se encontró la tarjeta' });
+        if (!card.responsibles?.length) {
+            return res.status(400).json({ message: 'La tarea no tiene responsables seleccionados.' });
+        }
+
+        const users = await md.usuarios.findAll({
+            where: { id: card.responsibles.map((r) => r.id) },
+            attributes: ['id', 'nombre', 'phone'],
+        });
+        const cliente = [card.report?.campana?.categoria?.empresa?.nombre, card.report?.campana?.nombre]
+            .filter(Boolean)
+            .join(' - ') || 'Sin campaña';
+        const estado = LIST_NAMES[card.list_id] ?? 'Pendientes';
+
+        const summary = await notifyUsuarios('tarea_asignada', users.map((u) => ({
+            nombre: u.nombre,
+            telefono: u.phone,
+            data: { tarea: card.name || 'Sin título', cliente, estado, cardId: card.id },
+        })));
+
+        if (summary.enviados > 0) {
+            await card.update({ last_notified_at: new Date() });
+        }
+        await md.tasks_activities.create({
+            card_id: card.id,
+            date_activity: new Date(),
+            activity_detail: summary.enviados > 0
+                ? `Aviso por WhatsApp enviado a: ${users.filter((u) => !summary.sinTelefono.includes(u.nombre)).map((u) => u.nombre).join(', ')}`
+                : 'Se intentó avisar por WhatsApp, pero no se pudo enviar a ningún responsable',
+            responsible_id: req.user.id,
+        });
+
+        res.status(200).json({ ...summary, last_notified_at: card.last_notified_at });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'No se pudo enviar el aviso por WhatsApp' });
+    }
+};
+
 const remove = async (req, res) => {
     try {
         const id = req.params.id;
@@ -351,4 +457,6 @@ module.exports = {
     getAssignedToMe,
     markAssignedAsRead,
     markAllAssignedAsRead,
+    notifyResponsibles,
+    notifyPreview,
 };

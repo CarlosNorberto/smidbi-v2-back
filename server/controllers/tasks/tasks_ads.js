@@ -8,7 +8,7 @@ const getByCardId = async (req, res) => {
             where: {
                 card_id: card_id
             },
-            attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'seg_segmentations', 'seg_ages', 'seg_cities']
+            attributes: ['id', 'card_id', 'material_links', 'platform_links', 'cta_ad', 'template', 'seg_segmentations', 'seg_ages', 'seg_cities']
         });        
         if (ad) {
             res.status(200).json(ad);
@@ -24,6 +24,7 @@ const getByCardId = async (req, res) => {
                 material_links: null,
                 platform_links: null,
                 cta_ad: null,
+                template: null,
                 seg_segmentations: segmentacion.segmentacion ? segmentacion.segmentacion : null,
                 seg_ages: segmentacion.demografia ? segmentacion.demografia : null,
                 seg_cities: segmentacion.geo_segmentacion ? segmentacion.geo_segmentacion : null
@@ -36,7 +37,7 @@ const getByCardId = async (req, res) => {
 
 const saveUpdate = async (req, res) => {
     try {
-        const { card_id, material_links, platform_links, cta_ad, segmentacion, demografia, geo_segmentacion } = req.body;
+        const { card_id, material_links, platform_links, cta_ad, template, segmentacion, demografia, geo_segmentacion } = req.body;
         let segmentacionRecord;
         if (card_id) {
             segmentacionRecord = await md.tasks_ads.findOne({ where: { card_id } });
@@ -45,6 +46,7 @@ const saveUpdate = async (req, res) => {
                     material_links: material_links,
                     platform_links: platform_links,
                     cta_ad: cta_ad,
+                    ...(template !== undefined && { template }),
                     seg_segmentations: segmentacion,
                     seg_ages: demografia,
                     seg_cities: geo_segmentacion,
@@ -55,6 +57,7 @@ const saveUpdate = async (req, res) => {
                     material_links: material_links,
                     platform_links: platform_links,
                     cta_ad: cta_ad,
+                    template: template ?? null,
                     seg_segmentations: segmentacion,
                     seg_ages: demografia,
                     seg_cities: geo_segmentacion,

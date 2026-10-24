@@ -19,7 +19,7 @@ const create = async (req, res) => {
         if (!req.body) {
             return res.status(400).json({ error: 'Datos no proporcionados' });
         }
-        const { id, country, city, name, position, email, phone, web_page, client } = req.body;
+        const { id, country, city, name, position, email, phone, web_page, client, industry_id } = req.body;
         if (!name) {
             return res.status(400).json({ error: 'El campo "name" es obligatorio' });
         }
@@ -32,7 +32,8 @@ const create = async (req, res) => {
             email,
             phone,
             web_page,
-            client
+            client,
+            industry_id
         });
         res.status(id ? 200 : 201).json(prospect);
     } catch (error) {
@@ -46,7 +47,7 @@ const update = async (req, res) => {
         if (!id) {
             return res.status(400).json({ error: 'ID del prospecto no proporcionado' });
         }
-        const { country, city, name, position, email, phone, web_page, client } = req.body;
+        const { country, city, name, position, email, phone, web_page, client, industry_id } = req.body;
         const prospect = await md.prospects.findOne({ where: { id } });
         if (!prospect) {
             return res.status(404).json({ error: 'Prospecto no encontrado' });
@@ -55,7 +56,7 @@ const update = async (req, res) => {
             return res.status(400).json({ error: 'El campo "name" es obligatorio' });
         }
         await prospect.update(
-            { country, city, name, position, email, phone, web_page, client }
+            { country, city, name, position, email, phone, web_page, client, industry_id }
         );
         res.status(200).json(prospect);
     } catch (error) {

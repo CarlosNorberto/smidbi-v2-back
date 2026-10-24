@@ -9,6 +9,7 @@ const qualifyBrief = require('../controllers/qualify_brief');
 const costoPor = require('../controllers/costo_por');
 const whatsapp = require('../controllers/whatsapp');
 const whatsappDestinatarios = require('../controllers/whatsapp_destinatarios');
+const contactSettings = require('../controllers/contact_settings');
 
 const multer = require('multer');
 const uploadQualifyImage = multer({
@@ -92,6 +93,10 @@ module.exports = (app) => {
     app.post(process.env.PREFIX_API + '/whatsapp/send', sessionAuth, requireRole('superadmin'), whatsapp.send);
 
     // WHATSAPP — destinatarios de avisos por proceso (Configuraciones > Notificaciones WhatsApp, admin/superadmin)
+    // Número de WhatsApp de atención del home público (el GET público solo expone ese número).
+    app.get(process.env.PREFIX_API + '/public/contact', rateLimit({ windowMs: 60 * 60 * 1000, max: 300, message: 'Demasiadas consultas.' }), contactSettings.getPublic);
+    app.get(process.env.PREFIX_API + '/contact_settings', sessionAuth, requireRole('admin', 'superadmin'), contactSettings.get);
+    app.put(process.env.PREFIX_API + '/contact_settings', sessionAuth, requireRole('admin', 'superadmin'), contactSettings.save);
     app.get(process.env.PREFIX_API + '/whatsapp_destinatarios/procesos', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.getProcesos);
     app.get(process.env.PREFIX_API + '/whatsapp_destinatarios/all', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.getAll);
     app.post(process.env.PREFIX_API + '/whatsapp_destinatarios/create', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.create);

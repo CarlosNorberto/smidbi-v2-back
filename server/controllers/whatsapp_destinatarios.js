@@ -82,4 +82,4 @@ const remove = async (req, res) => {
     }
 };
 
-module.exports = { getProcesos, getAll, create, update, remove };
+module.exports = { getProcesos, getAll, create, update, remove, normalizarTelefono };

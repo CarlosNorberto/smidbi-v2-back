@@ -6,6 +6,12 @@ const LEAD_MANAGER_SEARCH_FIELDS = {
         column: 'name',
         type: 'text',
     },
+    // Rubro del prospecto: se filtra por el prospecto asociado a la oportunidad.
+    industry: {
+        association: 'prospect',
+        column: 'industry_id',
+        type: 'select',
+    },
     responsible: {
         // association: 'responsible',
         column: 'responsible_id',
@@ -18,6 +24,11 @@ const LEAD_MANAGER_SEARCH_FIELDS = {
     },
     date: {
         column: 'date',
+        type: 'daterange',
+    },
+    // Fecha de último contacto: un día específico (from = to) o un rango.
+    last_contact: {
+        column: 'last_contact',
         type: 'daterange',
     },
     stage: {

@@ -4,7 +4,9 @@ const deals = require('../../controllers/lead_manager/deals');
 const estados = require('../../controllers/lead_manager/status');
 const servicios = require('../../controllers/lead_manager/services');
 const prospect_history = require('../../controllers/lead_manager/prospect_history');
+const follow_ups = require('../../controllers/lead_manager/follow_ups');
 const prospectos = require('../../controllers/lead_manager/prospects');
+const industries = require('../../controllers/lead_manager/industries');
 const responsibles = require('../../controllers/lead_manager/responsibles');
 const customer_temperature = require('../../controllers/lead_manager/customer_temperature');
 
@@ -40,6 +42,15 @@ module.exports=(app)=>{
     app.post(process.env.PREFIX_API + '/lead_manager/prospect_history/create', sessionAuth, prospect_history.create);
     app.put(process.env.PREFIX_API + '/lead_manager/prospect_history/update/:id', sessionAuth, prospect_history.update);
     app.delete(process.env.PREFIX_API + '/lead_manager/prospect_history/remove/:id', sessionAuth, prospect_history.remove);
+
+    // HISTORIAL DE GESTIONES (correo, WhatsApp, llamada, reunión) de una oportunidad
+    app.get(process.env.PREFIX_API + '/lead_manager/follow_ups/by_deal/:id', sessionAuth, follow_ups.getByDeal);
+    app.post(process.env.PREFIX_API + '/lead_manager/follow_ups/create', sessionAuth, follow_ups.create);
+    app.put(process.env.PREFIX_API + '/lead_manager/follow_ups/update/:id', sessionAuth, follow_ups.update);
+    app.delete(process.env.PREFIX_API + '/lead_manager/follow_ups/remove/:id', sessionAuth, follow_ups.remove);
+
+    // RUBROS / SECTORES de los prospectos
+    app.get(process.env.PREFIX_API + '/lead_manager/industries/all', sessionAuth, industries.getAll);
 
     // PROSPECTOS
     app.get(process.env.PREFIX_API + '/lead_manager/prospects/all', sessionAuth, prospectos.getAll);

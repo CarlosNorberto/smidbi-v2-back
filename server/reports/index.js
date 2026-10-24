@@ -5,7 +5,8 @@
 // y sumarlo a la lista de abajo. Las rutas y la exportación a Excel son
 // genéricas, no hace falta tocarlas.
 const reports = [
-    require('./clientesActivos.report').report
+    require('./clientesActivos.report').report,
+    require('./tiemposTareas.report').report
 ];
 
 const byId = new Map(reports.map((r) => [r.id, r]));
@@ -26,6 +27,9 @@ const resolveParams = (report, query = {}) => {
         }
         if (def.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
             return { error: `El parámetro "${def.label || def.key}" debe tener formato YYYY-MM-DD` };
+        }
+        if (def.type === 'month' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+            return { error: `El parámetro "${def.label || def.key}" debe tener formato AAAA-MM` };
         }
         params[def.key] = value;
     }

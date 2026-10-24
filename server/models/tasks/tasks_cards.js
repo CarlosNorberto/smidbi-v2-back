@@ -79,6 +79,19 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.INTEGER,
             allowNull: true,
         },
+        // Tiempos para medir la respuesta interna (ver migración 20261023040000).
+        created_at: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        started_at: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
+        last_notified_at: {
+            type: DataTypes.DATE,
+            allowNull: true,
+        },
     }, {
         tableName: 'tasks_cards',
         timestamps: false,
@@ -136,13 +149,13 @@ module.exports = (sequelize, DataTypes) => {
                 {
                     model: models.reportes,
                     as: 'report',
-                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp'],
+                    attributes: ['id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'cp', 'objetivo_proyectado'],
                     include: [
                         {
                             model: models.campanas,
                             as: 'campana',
                             required: true,
-                            attributes: ['id', 'nombre'],
+                            attributes: ['id', 'nombre', 'moneda'],
                             include: [
                                 {
                                     model: models.categorias,

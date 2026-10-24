@@ -1,4 +1,5 @@
 const md = require('../../models');
+const { FOLLOW_UPS_COUNT_ATTRIBUTE } = require('./follow_ups');
 const { buildFilters, LEAD_MANAGER_SEARCH_FIELDS, parseFilters } = require('../../helps/search');
 
 const getByStage = async (req, res) => {
@@ -10,11 +11,12 @@ const getByStage = async (req, res) => {
 
         const { rows, count } = await md.prospect_history.findAndCountAll({
             where: { stage_id, ...mainWhere },
+            attributes: { include: [FOLLOW_UPS_COUNT_ATTRIBUTE] },
             include: [
                 {
                     model: md.prospects,
                     as: 'prospect',
-                    attributes: ['id', 'name'],
+                    attributes: ['id', 'name', 'industry_id'],
                     where: includeWhere.prospect,
                     required: !!includeWhere.prospect,
                 },

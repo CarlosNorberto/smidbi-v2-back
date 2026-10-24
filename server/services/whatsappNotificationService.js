@@ -76,4 +76,47 @@ const notifyProceso = async (proceso, data = {}) => {
     return summary;
 };
 
-module.exports = { notifyProceso, buildComponents };
+/**
+ * Envía una plantilla a una lista de personas concretas (p. ej. los responsables de una tarea), cada una a su propio
+ * teléfono y con sus propios datos. Nunca lanza error. Quien no tiene teléfono se reporta en `sinTelefono`.
+ *
+ * @param {string} templateKey - clave en config/whatsapp_templates.js
+ * @param {Array<{ nombre: string, telefono: string|null, data: object }>} recipients
+ * @returns {Promise<{ enviados: number, fallidos: number, sinTelefono: string[], errores: string[] }>}
+ */
+const notifyUsuarios = async (templateKey, recipients = []) => {
+    const summary = { enviados: 0, fallidos: 0, sinTelefono: [], errores: [] };
+    const template = TEMPLATES[templateKey];
+    if (!template) {
+        summary.errores.push(`La plantilla "${templateKey}" no está configurada`);
+        return summary;
+    }
+
+    const withPhone = [];
+    for (const r of recipients) {
+        const to = String(r.telefono ?? '').replace(/\D/g, '');
+        if (/^\d{8,15}$/.test(to)) withPhone.push({ ...r, to });
+        else summary.sinTelefono.push(r.nombre);
+    }
+
+    const results = await Promise.allSettled(
+        withPhone.map((r) => sendTemplateMessage(
+            r.to,
+            template.name,
+            template.languageCode,
+            buildComponents(template.build({ nombre: r.nombre, ...r.data })),
+        )),
+    );
+    results.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+            summary.enviados += 1;
+        } else {
+            summary.fallidos += 1;
+            summary.errores.push(`${withPhone[i].nombre}: ${result.reason.message}`);
+        }
+    });
+    if (summary.errores.length > 0) console.error(`[WhatsApp] Aviso "${templateKey}" con errores:`, summary.errores);
+    return summary;
+};
+
+module.exports = { notifyProceso, notifyUsuarios, buildComponents };

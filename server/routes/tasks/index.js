@@ -17,6 +17,8 @@ module.exports=(app)=>{
     app.put(process.env.PREFIX_API + '/tasks_cards/assigned_to_me/read_all', sessionAuth, tasksCards.markAllAssignedAsRead);
     app.put(process.env.PREFIX_API + '/tasks_cards/assigned_to_me/:cardId/read', sessionAuth, tasksCards.markAssignedAsRead);
     app.get(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.getById);
+    app.get(process.env.PREFIX_API + '/tasks_cards/:id/notify_preview', sessionAuth, tasksCards.notifyPreview);
+    app.post(process.env.PREFIX_API + '/tasks_cards/:id/notify', sessionAuth, tasksCards.notifyResponsibles);
     app.post(process.env.PREFIX_API + '/tasks_cards/save', sessionAuth, tasksCards.save);
     app.put(process.env.PREFIX_API + '/tasks_cards/update/:id', sessionAuth, tasksCards.update);
     app.delete(process.env.PREFIX_API + '/tasks_cards/:id', sessionAuth, tasksCards.remove);

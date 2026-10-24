@@ -37,10 +37,18 @@ module.exports = (sequelize, DataTypes) => {
             type: DataTypes.STRING,
             allowNull: true,
         },
+        // Rubro o sector del prospecto (lead_manager.industries).
+        industry_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+        },
     }, {
         tableName: 'prospects',
         schema: 'lead_manager',
         timestamps: false,
     });
+    Prospects.associate = (models) => {
+        Prospects.belongsTo(models.industries, { foreignKey: 'industry_id', onDelete: 'SET NULL', as: 'industry' });
+    };
     return Prospects;
 }

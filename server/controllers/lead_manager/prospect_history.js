@@ -1,5 +1,6 @@
 const { buildFilters, LEAD_MANAGER_SEARCH_FIELDS, parseFilters } = require('../../helps/search');
 const md = require('../../models');
+const { FOLLOW_UPS_COUNT_ATTRIBUTE } = require('./follow_ups');
 
 const getById = async (req, res) => {
     try {
@@ -10,7 +11,7 @@ const getById = async (req, res) => {
                 {
                     model: md.prospects,
                     as: 'prospect',
-                    attributes: ['id', 'name', 'email', 'phone'],
+                    attributes: ['id', 'name', 'email', 'phone', 'industry_id'],
                 },
                 {
                     model: md.responsibles,
@@ -57,11 +58,12 @@ const getAll = async (req, res) => {
         const offset = (page - 1) * limit;
         const prospectHistories = await md.prospect_history.findAndCountAll({
             where: mainWhere,
+            attributes: { include: [FOLLOW_UPS_COUNT_ATTRIBUTE] },
             include: [
                 {
                     model: md.prospects,
                     as: 'prospect',
-                    attributes: ['id', 'name', 'email', 'phone'],
+                    attributes: ['id', 'name', 'email', 'phone', 'industry_id'],
                     where: includeWhere.prospect || {},
                     required: !!includeWhere.prospect,
                 },
@@ -116,7 +118,7 @@ const getAll = async (req, res) => {
 
 const create = async (req, res) => {
     try {
-        const { prospect_id, stage_id, name, email, phone } = req.body;
+        const { prospect_id, stage_id, name, email, phone, industry_id } = req.body;
         if (!prospect_id || !stage_id) {
             return res
                 .status(400)
@@ -132,7 +134,7 @@ const create = async (req, res) => {
                     .status(404)
                     .json({ error: 'Prospecto no encontrado' });
             }
-            await prospect.update({ email, phone });
+            await prospect.update({ email, phone, ...(industry_id !== undefined && { industry_id }) });
             // Crear un nuevo registro en prospect_history
             newProspectHistory = await md.prospect_history.create({
                 prospect_id,
@@ -151,7 +153,8 @@ const create = async (req, res) => {
             const newProspect = await md.prospects.create({
                 name,
                 email,
-                phone,                
+                phone,
+                industry_id,
             });
             // Crear un nuevo registro en prospect_history para el nuevo prospecto
             newProspectHistory = await md.prospect_history.create({
@@ -167,7 +170,7 @@ const create = async (req, res) => {
                 {
                     model: md.prospects,
                     as: 'prospect',
-                    attributes: ['id', 'name', 'email', 'phone'],
+                    attributes: ['id', 'name', 'email', 'phone', 'industry_id'],
                 },
                 {
                     model: md.responsibles,
@@ -187,15 +190,16 @@ const create = async (req, res) => {
 const update = async (req, res) => {
     try {
         const { id } = req.params;
-        const { prospect_id, stage_id, responsible_id, final_state_id, customer_temperature_id, last_contact, observations, fuente_medio, service_ids, email, phone } = req.body;
+        const { prospect_id, stage_id, responsible_id, final_state_id, customer_temperature_id, last_contact, observations, fuente_medio, service_ids, email, phone, industry_id } = req.body;
         const prospectHistory = await md.prospect_history.findByPk(id);
         if (!prospectHistory) {
             return res.status(404).json({ error: 'Historial de prospecto no encontrado' });
         }
-        if (prospect_id && (email || phone)) {
+        if (prospect_id && (email || phone || industry_id !== undefined)) {
             const prospect = await md.prospects.findByPk(prospect_id);
             if (prospect) {
-                await prospect.update({ email, phone });
+                // industry_id null = quitar el rubro; undefined = no tocarlo.
+                await prospect.update({ email, phone, ...(industry_id !== undefined && { industry_id }) });
             }
         }
         await prospectHistory.update({ prospect_id, stage_id, responsible_id, final_state_id, customer_temperature_id, last_contact, observations, fuente_medio });

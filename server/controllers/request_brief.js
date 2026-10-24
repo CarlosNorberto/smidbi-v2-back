@@ -204,11 +204,10 @@ const buildPublicBriefData = (body) => {
     }
     if (data.slogan.length > 3000) return { error: 'El mensaje clave es demasiado largo.' };
 
-    if (typeof body.recursos_graficos !== 'boolean' || typeof body.recursos_audiovisuales !== 'boolean') {
-        return { error: 'Indique si cuenta con recursos gráficos y audiovisuales.' };
-    }
-    data.recursos_graficos = body.recursos_graficos;
-    data.recursos_audiovisuales = body.recursos_audiovisuales;
+    // El formulario ya no pregunta por separado si cuenta con recursos gráficos o audiovisuales: lo explica el
+    // cliente en "Entregables / Formatos". Las columnas son NOT NULL (tabla compartida con la app antigua).
+    data.recursos_graficos = body.recursos_graficos === true;
+    data.recursos_audiovisuales = body.recursos_audiovisuales === true;
 
     if (!DATE_REGEX.test(body.fecha_inicio) || !DATE_REGEX.test(body.fecha_fin)) {
         return { error: 'Las fechas de la campaña no son válidas.' };

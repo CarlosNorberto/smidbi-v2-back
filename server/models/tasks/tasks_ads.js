@@ -74,6 +74,11 @@ module.exports = (sequelize, DataTypes) => {
             defaultValue: false,
             allowNull: true,
         },
+        // Plantilla de creación de campaña (ver migración 20261023050000).
+        template: {
+            type: DataTypes.JSONB,
+            allowNull: true,
+        },
     }, {
         tableName: 'tasks_ads',
         timestamps: false,
