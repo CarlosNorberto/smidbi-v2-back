@@ -41,6 +41,7 @@ module.exports = (sequelize, DataTypes) => {
         funnel_stage_3: DataTypes.BOOLEAN,
         funnel_stage_4: DataTypes.BOOLEAN,
         url_linkedin: DataTypes.STRING,
+        url_tiktok: DataTypes.STRING,
         url_instagram: DataTypes.STRING,
         comments: DataTypes.TEXT,
         copia_from: DataTypes.INTEGER,

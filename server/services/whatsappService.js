@@ -1,7 +1,11 @@
 const axios = require('axios');
 
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+// Los valores del .env a veces llegan con espacios, comillas o un "=" sobrante (WHATSAPP_PHONE_NUMBER_ID==123…), y Meta
+// responde "Object with ID '=123…' does not exist". Se limpian antes de armar la URL.
+const cleanEnv = (value) => String(value ?? '').replace(/^[=\s"']+|[\s"']+$/g, '');
+
+const WHATSAPP_TOKEN = cleanEnv(process.env.WHATSAPP_TOKEN);
+const PHONE_NUMBER_ID = cleanEnv(process.env.WHATSAPP_PHONE_NUMBER_ID);
 const API_VERSION = process.env.WHATSAPP_API_VERSION || 'v21.0';
 
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}/${PHONE_NUMBER_ID}/messages`;

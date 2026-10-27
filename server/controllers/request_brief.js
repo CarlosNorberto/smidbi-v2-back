@@ -164,15 +164,16 @@ const MAX_LENGTHS = {
     url_youtube: 200,
     url_twitter: 200,
     url_linkedin: 200,
+    url_tiktok: 200,
     url_descarga_app: 200,
     competencia_directa: 3000,
     publico_objetivo: 3000,
     kpis: 3000,
     entregables: 3000,
 };
-const REQUIRED_TEXT = ['nombre_empresa', 'responsable', 'nombre_campana', 'mail', 'telefono', 'descripcion', 'publico_objetivo', 'slogan'];
+const REQUIRED_TEXT = ['nombre_empresa', 'responsable', 'nombre_campana', 'mail', 'telefono', 'descripcion', 'publico_objetivo'];
 const OPTIONAL_TEXT = [
-    'url', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_linkedin', 'competencia_directa', 'kpis', 'entregables',
+    'slogan', 'url', 'url_fanpage', 'url_instagram', 'url_tiktok', 'url_youtube', 'url_linkedin', 'competencia_directa', 'kpis', 'entregables',
 ];
 const MONEDAS_VALIDAS = ['$us.', 'Bs.'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -202,7 +203,7 @@ const buildPublicBriefData = (body) => {
         }
         data[field] = value || null;
     }
-    if (data.slogan.length > 3000) return { error: 'El mensaje clave es demasiado largo.' };
+    if (data.slogan && data.slogan.length > 3000) return { error: 'El mensaje clave es demasiado largo.' };
 
     // El formulario ya no pregunta por separado si cuenta con recursos gráficos o audiovisuales: lo explica el
     // cliente en "Entregables / Formatos". Las columnas son NOT NULL (tabla compartida con la app antigua).
@@ -275,7 +276,7 @@ const createPublic = async (req, res) => {
 const PUBLIC_VIEW_FIELDS = [
     'id', 'nombre_empresa', 'nombre_campana', 'responsable', 'mail', 'telefono', 'descripcion', 'slogan',
     'competencia_directa', 'publico_objetivo', 'kpis', 'entregables', 'comments', 'url', 'url_destino', 'url_fanpage', 'url_instagram', 'url_youtube', 'url_twitter',
-    'url_linkedin', 'url_descarga_app', 'recursos_graficos', 'recursos_audiovisuales', 'fecha_inicio', 'fecha_fin',
+    'url_linkedin', 'url_tiktok', 'url_descarga_app', 'recursos_graficos', 'recursos_audiovisuales', 'fecha_inicio', 'fecha_fin',
     'presupuesto', 'moneda', 'geolocalizacion', 'geolocalizacion_ciudad', 'segmentacion_edad', 'segmentacion_sexo',
     'intereses', 'medios', 'funnel_stage_1', 'funnel_stage_2', 'funnel_stage_3', 'funnel_stage_4', 'fecha_creacion',
 ];

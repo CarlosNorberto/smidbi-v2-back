@@ -51,6 +51,7 @@ module.exports=(app)=>{
 
     // RUBROS / SECTORES de los prospectos
     app.get(process.env.PREFIX_API + '/lead_manager/industries/all', sessionAuth, industries.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/industries/create', sessionAuth, industries.create);
 
     // PROSPECTOS
     app.get(process.env.PREFIX_API + '/lead_manager/prospects/all', sessionAuth, prospectos.getAll);
