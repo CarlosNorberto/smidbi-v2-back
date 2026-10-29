@@ -1,4 +1,5 @@
 const md = require('../../models');
+const { canManageCompany, canManageCategory, getCompanyOwnerId, denyAccess } = require('../../auth/ownership');
 
 const getById = async (req, res) => {
     try {
@@ -52,13 +53,17 @@ const create = async (req, res) => {
         if (!id_empresa || !nombre) {
             return res.status(400).json({ message: 'id_empresa y nombre son obligatorios.' });
         }
+        if (!(await canManageCompany(req.user, id_empresa))) {
+            return denyAccess(res);
+        }
         const categoria = await md.categorias.create({
             id_empresa,
             nombre,
             descripcion,
             activo: true,
             usuario_creacion: req.user.id,
-            id_usuario: req.user.id,
+            // Hereda el responsable de la empresa (no el de quien la crea).
+            id_usuario: (await getCompanyOwnerId(id_empresa)) ?? req.user.id,
         });
         res.status(201).json(categoria);
     } catch (error) {
@@ -75,6 +80,21 @@ const update = async (req, res) => {
         if (!categoria) {
             await t.rollback();
             return res.status(404).json({ message: 'Categoría no encontrada' });
+        }
+        if (!(await canManageCategory(req.user, categoria.id))) {
+            await t.rollback();
+            return denyAccess(res);
+        }
+        // Reactivar una categoría (estaba inactiva y pasa a activa) no tiene
+        // sentido si su empresa sigue inactiva: el cliente seguiría sin acceso y
+        // quedaría un estado inconsistente. Reactivarla NO reactiva en cascada lo
+        // que contiene (campañas/reportes): se reactivan a mano, uno por uno.
+        if (activo === true && categoria.activo === false) {
+            const empresa = await md.empresas.findByPk(categoria.id_empresa, { attributes: ['activo'], transaction: t });
+            if (empresa && empresa.activo === false) {
+                await t.rollback();
+                return res.status(409).json({ message: 'No se puede reactivar la categoría porque su empresa está inactiva. Reactive primero la empresa.' });
+            }
         }
         await categoria.update({
             nombre,

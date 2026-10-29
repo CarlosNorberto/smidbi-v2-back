@@ -13,6 +13,11 @@ const PROCESOS = [
         label: 'Respuesta a una propuesta',
         description: 'Cuando un cliente acepta o rechaza la propuesta del planificador.',
     },
+    {
+        key: 'nuevo_reporte',
+        label: 'Nuevo reporte creado',
+        description: 'Cuando un usuario crea un reporte nuevo en una campaña.',
+    },
 ];
 
 const PROCESOS_KEYS = PROCESOS.map((p) => p.key);

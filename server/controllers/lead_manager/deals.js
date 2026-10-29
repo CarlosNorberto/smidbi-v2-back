@@ -33,7 +33,7 @@ const getByStage = async (req, res) => {
                 {
                     model: md.customer_temperature,
                     as: 'temperature',
-                    attributes: ['id', 'name'],
+                    attributes: ['id', 'name', 'icon'],
                 },
                 {
                     model: md.services,

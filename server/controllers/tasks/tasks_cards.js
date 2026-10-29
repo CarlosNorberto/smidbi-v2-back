@@ -327,6 +327,7 @@ const getAssignedToMe = async (req, res) => {
 
         res.status(200).json(result);
     } catch (error) {
+        console.error('Error en getAssignedToMe:', error);
         res.status(500).json({ message: 'Error al obtener las tareas asignadas' });
     }
 };

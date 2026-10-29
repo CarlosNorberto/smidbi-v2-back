@@ -1,6 +1,12 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
 const crypto = require('crypto');
+const { isUnrestricted, canManageCompany, denyAccess } = require('../../auth/ownership');
+
+// Campos que el cliente nunca puede fijar por el body: el responsable (dueño)
+// se asigna al crear y NO cambia al editar; el token de acceso solo se maneja
+// por sus endpoints dedicados.
+const PROTECTED_FIELDS = ['id', 'id_usuario', 'usuario_creacion', 'fecha_creacion', 'access_token'];
 
 // Seguridad mínima para la contraseña de acceso de cliente: no ultra estricta,
 // pero ya no libre como estaba. Mín. 8 caracteres, al menos una letra y un número.
@@ -114,7 +120,10 @@ const getAllByUsers = async (req, res) => {
         let where = company_id ? { id: company_id } : { activo: active };
         if (!isUnrestricted) {
             where.id_usuario = req.user.id;
-        } else if (user_ids) {
+        } else if (user_ids && !company_id) {
+            // El filtro por responsable solo aplica al listado general. Con una empresa concreta
+            // (/admin/companies/:id, p. ej. al elegirla en el buscador general) se ignora: el frontend lo manda
+            // con el valor por defecto (el propio admin) y escondía las empresas de otros usuarios.
             where.id_usuario = { [md.Sequelize.Op.in]: user_ids.split(',') };
         }
         if (!company_id && name) {
@@ -188,7 +197,16 @@ const create = async (req, res) => {
                 });
         }
 
+        // El responsable es quien crea la empresa (antes caía en el default 1 del
+        // modelo y la empresa no aparecía en la lista de quien la creó). Solo
+        // admin/superadmin pueden asignarla a otro responsable al crearla.
+        const requestedOwner = Number(req.body.id_usuario);
+        const ownerId = isUnrestricted(req.user) && Number.isInteger(requestedOwner) && requestedOwner > 0
+            ? requestedOwner
+            : req.user.id;
+        PROTECTED_FIELDS.forEach((field) => delete req.body[field]);
         req.body.usuario_creacion = req.user.id;
+        req.body.id_usuario = ownerId;
         const newEmpresa = await md.empresas.create(req.body);
         res.status(201).json(newEmpresa);
     } catch (error) {
@@ -209,6 +227,11 @@ const update = async (req, res) => {
         if (!empresa) {
             return res.status(404).json({ message: 'Empresa no encontrada' });
         }
+        if (!(await canManageCompany(req.user, empresa.id))) {
+            return denyAccess(res);
+        }
+        // Editar una empresa no cambia su responsable ni sus datos de control.
+        PROTECTED_FIELDS.forEach((field) => delete req.body[field]);
 
         const { usuario, password } = req.body;
 
@@ -374,6 +397,73 @@ const revokeAccessToken = async (req, res) => {
     }
 };
 
+// Asigna la empresa a otro responsable y, en cascada, todas sus categorías,
+// campañas y reportes (que siempre deben tener el mismo responsable que su empresa).
+// Solo admin/superadmin (ver la ruta). Es la ÚNICA forma de cambiar el responsable
+// de una empresa existente: editarla no lo cambia. No toca las tareas ni sus
+// responsables (tasks_card_responsibles).
+const assignOwner = async (req, res) => {
+    const t = await md.sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const newOwnerId = Number(req.body.id_usuario);
+        if (!Number.isInteger(newOwnerId) || newOwnerId <= 0) {
+            await t.rollback();
+            return res.status(400).json({ message: 'Debe indicar el usuario al que se asignará la empresa.' });
+        }
+
+        const empresa = await md.empresas.findByPk(id, { transaction: t });
+        if (!empresa) {
+            await t.rollback();
+            return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+
+        const usuario = await md.usuarios.findOne({
+            where: { id: newOwnerId },
+            include: [{ model: md.roles, as: 'role' }],
+            transaction: t,
+        });
+        if (!usuario || usuario.activo === false) {
+            await t.rollback();
+            return res.status(400).json({ message: 'El usuario seleccionado no existe o está inactivo.' });
+        }
+        if (usuario.role?.rol === 'hidden') {
+            await t.rollback();
+            return res.status(400).json({ message: 'No se puede asignar una empresa a un usuario con rol oculto.' });
+        }
+
+        const previousOwnerId = empresa.id_usuario;
+        await empresa.update(
+            { id_usuario: newOwnerId, usuario_modificacion: req.user.id, fecha_modificacion: new Date() },
+            { transaction: t },
+        );
+
+        let categorias = 0;
+        let campanas = 0;
+        let reportes = 0;
+        const categoriaIds = (await md.categorias.findAll({ where: { id_empresa: id }, attributes: ['id'], transaction: t })).map((c) => c.id);
+        if (categoriaIds.length > 0) {
+            [categorias] = await md.categorias.update({ id_usuario: newOwnerId }, { where: { id_empresa: id }, transaction: t });
+            const campanaIds = (await md.campanas.findAll({ where: { id_categoria: categoriaIds }, attributes: ['id'], transaction: t })).map((c) => c.id);
+            if (campanaIds.length > 0) {
+                [campanas] = await md.campanas.update({ id_usuario: newOwnerId }, { where: { id_categoria: categoriaIds }, transaction: t });
+                [reportes] = await md.reportes.update({ id_usuario: newOwnerId }, { where: { id_campana: campanaIds }, transaction: t });
+            }
+        }
+
+        await t.commit();
+        res.status(200).json({
+            message: 'Empresa asignada correctamente',
+            previous_owner_id: previousOwnerId,
+            owner: { id: usuario.id, nombre: usuario.nombre },
+            affected: { empresas: 1, categorias, campanas, reportes },
+        });
+    } catch (error) {
+        if (!t.finished) await t.rollback();
+        res.status(500).json({ message: `Error al asignar la empresa: ${error.message}` });
+    }
+};
+
 module.exports = {
     getById,
     getAll,
@@ -383,4 +473,5 @@ module.exports = {
     generateAccessToken,
     getAccessToken,
     revokeAccessToken,
+    assignOwner,
 };

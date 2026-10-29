@@ -5,6 +5,7 @@ const utilities = require('../controllers/utilities');
 const systemSettings = require('../controllers/system_settings');
 const clientAuth = require('../controllers/client_auth');
 const requestBrief = require('../controllers/request_brief');
+const reportPublic = require('../controllers/report_public');
 const qualifyBrief = require('../controllers/qualify_brief');
 const costoPor = require('../controllers/costo_por');
 const whatsapp = require('../controllers/whatsapp');
@@ -72,6 +73,14 @@ module.exports = (app) => {
         process.env.PREFIX_API + '/public/request_briefs/view/:code',
         rateLimit({ windowMs: 60 * 60 * 1000, max: 120, message: 'Demasiadas consultas. Intente nuevamente más tarde.' }),
         requestBrief.getPublicView
+    );
+
+    // Ubica el reporte del link firmado de la plantilla de WhatsApp "reporte_creado" (sin login; ver
+    // utils/reportLink.js). El mismo límite que la vista pública del brief.
+    app.get(
+        process.env.PREFIX_API + '/public/reports/view/:token',
+        rateLimit({ windowMs: 60 * 60 * 1000, max: 120, message: 'Demasiadas consultas. Intente nuevamente más tarde.' }),
+        reportPublic.resolveToken
     );
 
     // CALIFICACIÓN DE BRIEF (q1-q4 / RATE CARD + imágenes de respaldo)

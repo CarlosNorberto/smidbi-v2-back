@@ -1,5 +1,6 @@
 const md = require('../../models');
 const { copyReportWithChildren } = require('./reportes');
+const { canManageCategory, canManageCampaign, getCategoryOwnerId, getCampaignOwnerId, denyAccess } = require('../../auth/ownership');
 
 const getById = async (req, res) => {
     try {
@@ -107,7 +108,14 @@ const copyCampaignAndReports = async (req, res) => {
             await transaction.rollback();
             return res.status(404).json({ message: 'No se encontró la campaña a copiar' });
         }
+        if (!(await canManageCampaign(req.user, sourceCampaign.id))) {
+            await transaction.rollback();
+            return denyAccess(res);
+        }
 
+        // La copia (y sus reportes) quedan a nombre del responsable de la empresa,
+        // no de quien copia.
+        const ownerId = (await getCampaignOwnerId(sourceCampaign.id)) ?? req.user.id;
         const data = sourceCampaign.toJSON();
         const sourceReports = data.reportes || [];
         CAMPAIGN_COPY_OMIT_FIELDS.forEach((field) => delete data[field]);
@@ -122,7 +130,7 @@ const copyCampaignAndReports = async (req, res) => {
                 gestion,
                 moneda,
                 usuario_creacion: req.user.id,
-                id_usuario: req.user.id,
+                id_usuario: ownerId,
                 activo: true,
                 copy_from: sourceCampaign.id,
             },
@@ -135,7 +143,7 @@ const copyCampaignAndReports = async (req, res) => {
         for (const sourceReport of sourceReports) {
             await copyReportWithChildren(
                 sourceReport,
-                { nombre: sourceReport.nombre, id_campana: newCampaign.id },
+                { nombre: sourceReport.nombre, id_campana: newCampaign.id, id_usuario: ownerId },
                 req.user.id,
                 transaction,
             );
@@ -155,6 +163,9 @@ const create = async (req, res) => {
         if (!id_categoria || !nombre || !mes || !gestion || !moneda) {
             return res.status(400).json({ message: 'id_categoria, nombre, mes, gestion y moneda son obligatorios.' });
         }
+        if (!(await canManageCategory(req.user, id_categoria))) {
+            return denyAccess(res);
+        }
         const campana = await md.campanas.create({
             id_categoria,
             nombre,
@@ -164,7 +175,8 @@ const create = async (req, res) => {
             moneda,
             activo: true,
             usuario_creacion: req.user.id,
-            id_usuario: req.user.id,
+            // Hereda el responsable de la empresa (no el de quien la crea).
+            id_usuario: (await getCategoryOwnerId(id_categoria)) ?? req.user.id,
         });
         res.status(201).json(campana);
     } catch (error) {
@@ -181,6 +193,19 @@ const update = async (req, res) => {
         if (!campana) {
             await t.rollback();
             return res.status(404).json({ message: 'Campaña no encontrada' });
+        }
+        if (!(await canManageCampaign(req.user, campana.id))) {
+            await t.rollback();
+            return denyAccess(res);
+        }
+        // Ver nota en categorias.update: no se reactiva bajo un padre inactivo y
+        // reactivar no devuelve a activo los reportes de la campaña.
+        if (activo === true && campana.activo === false) {
+            const categoria = await md.categorias.findByPk(campana.id_categoria, { attributes: ['activo'], transaction: t });
+            if (categoria && categoria.activo === false) {
+                await t.rollback();
+                return res.status(409).json({ message: 'No se puede reactivar la campaña porque su categoría está inactiva. Reactive primero la categoría.' });
+            }
         }
         await campana.update({
             nombre,

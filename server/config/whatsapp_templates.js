@@ -23,6 +23,22 @@ const TEMPLATES = {
     },
 };
 
+// Plantilla "reporte_creado" (proceso "Nuevo reporte creado"), registrada en Meta con UNA variable:
+//   "Se generó el reporte {{1}} y ya está disponible en el sistema. Puedes consultarlo en el botón de abajo."
+// + botón con URL dinámica:  https://<FRONT_URL>/admin/report?token={{1}}
+//   ({{1}} del botón = token firmado que lleva dentro el id del reporte; ver utils/reportLink.js).
+// El link abre la pantalla del reporte en modo SOLO LECTURA sin iniciar sesión (si ya hay sesión, abre la
+// edición normal). Las variables deben coincidir EXACTAMENTE (cantidad y orden) con las de la plantilla
+// aprobada en Meta: si cambia el texto, hay que ajustar `build` acá.
+TEMPLATES.nuevo_reporte = {
+    name: 'reporte_creado',
+    languageCode: LANGUAGE_CODE,
+    build: ({ reporte, token }) => ({
+        bodyParams: [reporte],
+        buttonParam: token,
+    }),
+};
+
 // Plantilla "tarea_asignada" (aviso a los responsables de una tarea de /tasks). Texto sugerido para registrarla en Meta:
 //   "Se te asignó la tarea {{1}} en el sistema. Puedes ver el detalle en el botón de abajo."
 // + botón "Ver tarea" con URL dinámica:  https://<FRONT_URL>/admin/tasks/card/{{1}}   ({{1}} = id de la tarea)

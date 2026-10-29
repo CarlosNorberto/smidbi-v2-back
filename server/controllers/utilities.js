@@ -2,6 +2,7 @@
 const md = require('../models');
 const { Op } = require('sequelize');
 const Sequelize = require('sequelize');
+const { isUnrestricted } = require('../auth/ownership');
 
 /**
  * Condición de búsqueda por nombre (insensible a mayúsculas y a espacios),
@@ -26,6 +27,34 @@ const buildYearCondition = (year) => ({
         Sequelize.where(Sequelize.fn('EXTRACT', Sequelize.literal('YEAR FROM "fecha_fin"')), year),
     ]
 });
+
+/**
+ * Qué reportes puede ver en el buscador un usuario que NO es admin/superadmin: los de las empresas de las que es
+ * responsable (un reporte pertenece al dueño de su empresa, aunque por datos anteriores a esa regla figure
+ * asignado a otro usuario) y, además, los que tiene asignados directamente (`reportes.id_usuario`) — así el buscador
+ * muestra lo mismo que puede abrir y editar (ver canManageReport en auth/ownership.js).
+ * Devuelve null para admin/superadmin: ven todo, sin condición.
+ * El id va como número dentro del SQL (Number() evita cualquier texto raro); no hay entrada del usuario en la consulta.
+ */
+const buildReportVisibility = (user) => {
+    if (isUnrestricted(user)) return null;
+    const userId = Number(user.id);
+    return {
+        [Op.or]: [
+            { id_usuario: userId },
+            {
+                id_campana: {
+                    [Op.in]: Sequelize.literal(
+                        `(SELECT ca.id FROM campanas ca
+                            JOIN categorias c ON c.id = ca.id_categoria
+                            JOIN empresas e ON e.id = c.id_empresa
+                          WHERE e.id_usuario = ${userId})`
+                    ),
+                },
+            },
+        ],
+    };
+};
 
 /**
  * Busca reportes por nombre utilizando un query param 'q'. La búsqueda es insensible a mayúsculas y devuelve reportes que contienen el término de búsqueda en su nombre. Los resultados incluyen información de campaña, categoría y empresa, y están ordenados por activos primero y luego por fecha de fin más reciente. Si 'q' no se proporciona o es muy corto, devuelve un array vacío.
@@ -56,9 +85,12 @@ const campaignSearch = async (req, res) => {
             andConditions.push({ '$campana.id_categoria$': category_id });
         }
 
-        // check user role admin/superadmin: show all, else filter by user_id
-        if (!['admin', 'superadmin'].includes(req.user.role?.rol)) {
-            andConditions.push({ id_usuario: req.user.id });
+        // admin/superadmin ven TODOS los reportes (y en cada resultado se indica de quién es); el resto de
+        // roles solo los suyos (ver buildReportVisibility).
+        const seesAll = isUnrestricted(req.user);
+        const visibility = buildReportVisibility(req.user);
+        if (visibility) {
+            andConditions.push(visibility);
         }
 
         const reportes = await md.reportes.findAll({
@@ -79,7 +111,7 @@ const campaignSearch = async (req, res) => {
                                 {
                                     model: md.empresas,
                                     as: 'empresa',
-                                    attributes: ['id', 'nombre']
+                                    attributes: ['id', 'nombre', 'id_usuario']
                                 }
                             ]
                         }
@@ -92,11 +124,24 @@ const campaignSearch = async (req, res) => {
             ]
         });
 
+        // Solo para admin/superadmin: a quién pertenece cada reporte = el responsable de SU EMPRESA (un reporte
+        // pertenece a un solo usuario: el dueño de la empresa). Una consulta de nombres para todos.
+        const ownerOf = (r) => r.campana?.categoria?.empresa?.id_usuario;
+        const owners = new Map();
+        if (seesAll) {
+            const ownerIds = [...new Set(reportes.map(ownerOf).filter(Boolean))];
+            if (ownerIds.length > 0) {
+                const users = await md.usuarios.findAll({ where: { id: ownerIds }, attributes: ['id', 'nombre'] });
+                users.forEach((u) => owners.set(u.id, u.nombre));
+            }
+        }
+
         return res.json({
             results: reportes.map(r => ({
                 id: r.id,
                 nombre: r.nombre,
                 activo: r.activo,
+                ...(seesAll && { responsable: owners.get(ownerOf(r)) ?? null }),
                 periodo: (r.fecha_ini && r.fecha_fin) ? `${formatDate(r.fecha_ini)} - ${formatDate(r.fecha_fin)}` : null,
                 empresa: r.campana?.categoria?.empresa?.nombre,
                 categoria: r.campana?.categoria?.nombre,
@@ -114,7 +159,8 @@ const campaignSearch = async (req, res) => {
 /**
  * Devuelve las opciones disponibles (años y categorías) para filtrar la búsqueda
  * de campañas, respetando la misma visibilidad que campaignSearch: un usuario
- * normal solo ve años/categorías de sus propios reportes; admin/superadmin ven todos.
+ * normal solo ve años/categorías de sus reportes (ver buildReportVisibility);
+ * admin/superadmin ven todos.
  *
  * Si se envía 'q' (y opcionalmente 'year' para las categorías), las opciones se
  * acotan a las que realmente tienen coincidencias con esa búsqueda, en lugar de
@@ -125,8 +171,8 @@ const campaignSearchFilters = async (req, res) => {
         const { q, year } = req.query;
         const hasQuery = q && q.length >= 2;
 
-        const isAdmin = ['admin', 'superadmin'].includes(req.user.role?.rol);
-        const visibilityCondition = isAdmin ? [] : [{ id_usuario: req.user.id }];
+        const visibility = buildReportVisibility(req.user);
+        const visibilityCondition = visibility ? [visibility] : [];
         const nameCondition = hasQuery ? [buildNameCondition(q, 'reportes.nombre')] : [];
 
         // Se consulta desde md.reportes (misma base/joins que campaignSearch) en vez de
@@ -204,22 +250,23 @@ const companySearch = async (req, res) => {
             return res.json({ results: [] });
         }
         const normalized = q.replace(/\s+/g, '');
-        let where = Sequelize.where(
-            Sequelize.fn('REPLACE', Sequelize.col('nombre'), ' ', ''),
-            { [Op.iLike]: `%${normalized}%` }
-        );
-        where = {
-            [Op.and]: [
-                where,
-                { id_usuario: req.user.id }
-            ]
-        };
-        if (['admin', 'superadmin'].includes(req.user.role?.rol)) {
-            delete where[Op.and][1]; // eliminar filtro por usuario para admin
+        // 'empresas.nombre' (y no solo 'nombre') porque con el responsable incluido la columna sería ambigua.
+        const conditions = [
+            Sequelize.where(
+                Sequelize.fn('REPLACE', Sequelize.col('empresas.nombre'), ' ', ''),
+                { [Op.iLike]: `%${normalized}%` }
+            ),
+        ];
+        // admin/superadmin ven TODAS las empresas (y en cada resultado se indica de quién es); el resto de
+        // roles solo las suyas (empresas.id_usuario = el usuario de la sesión).
+        const seesAll = isUnrestricted(req.user);
+        if (!seesAll) {
+            conditions.push({ id_usuario: req.user.id });
         }
         const empresas = await md.empresas.findAll({
-            where: where,
+            where: { [Op.and]: conditions },
             attributes: ['id', 'nombre', 'activo'],
+            include: seesAll ? [{ model: md.usuarios, as: 'user', attributes: ['id', 'nombre'] }] : [],
             limit: 10,
             order: [['nombre', 'ASC']]
         });
@@ -228,6 +275,7 @@ const companySearch = async (req, res) => {
                 id: e.id,
                 nombre: e.nombre,
                 activo: e.activo,
+                ...(seesAll && { responsable: e.user?.nombre ?? null }),
                 url: `/admin/companies/${e.id}`
             }))
         });

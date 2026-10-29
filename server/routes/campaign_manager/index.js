@@ -7,6 +7,7 @@ const plataformas = require('../../controllers/campaign_manager/plataformas');
 const objetivos = require('../../controllers/campaign_manager/objetivos');
 const segmentaciones = require('../../controllers/campaign_manager/segmentacion');
 const seguimiento = require('../../controllers/campaign_manager/seguimiento');
+const { sessionOrReportToken, scopes } = require('../../auth/report_token_auth');
 
 // multer for file uploads (if needed in the future)
 const multer = require('multer');
@@ -32,6 +33,8 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/companies/users', sessionAuth, empresas.getAllByUsers);
     app.post(process.env.PREFIX_API + '/companies/create', sessionAuth, empresas.create);
     app.put(process.env.PREFIX_API + '/companies/update/:id', sessionAuth, empresas.update);
+    // Reasignar la empresa + sus categorías, campañas y reportes a otro responsable (admin/superadmin).
+    app.put(process.env.PREFIX_API + '/companies/:id/assign', sessionAuth, requireRole('admin', 'superadmin'), empresas.assignOwner);
     app.get(process.env.PREFIX_API + '/companies/:id/access_token', sessionAuth, empresas.getAccessToken);
     app.post(process.env.PREFIX_API + '/companies/:id/access_token/generate', sessionAuth, empresas.generateAccessToken);
     app.delete(process.env.PREFIX_API + '/companies/:id/access_token', sessionAuth, empresas.revokeAccessToken);
@@ -43,7 +46,9 @@ module.exports = (app) => {
     app.put(process.env.PREFIX_API + '/categories/update/:id', sessionAuth, categorias.update);
 
     // CAMPAÑAS
-    app.get(process.env.PREFIX_API + '/campaigns/one/:id', sessionAuth, campanas.getById);
+    // Las rutas GET marcadas con sessionOrReportToken también las abre el token del aviso de WhatsApp
+    // (/admin/report?token=...), solo lectura y solo del reporte del token (ver auth/report_token_auth.js).
+    app.get(process.env.PREFIX_API + '/campaigns/one/:id', sessionOrReportToken(scopes.campaignOfReport), campanas.getById);
     app.get(process.env.PREFIX_API + '/campaigns/all/:category_id', sessionAuth, campanas.getByCategory);
     app.post(process.env.PREFIX_API + '/campaigns/copy', sessionAuth, campanas.copyCampaignAndReports);
     app.post(process.env.PREFIX_API + '/campaigns/create', sessionAuth, campanas.create);
@@ -53,7 +58,7 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/client_menu/summary', clientSessionAuth, reportes.getSummaryForClientMenu);
 
     // REPORTES
-    app.get(process.env.PREFIX_API + '/reports/one/:id', sessionAuth, reportes.getById);
+    app.get(process.env.PREFIX_API + '/reports/one/:id', sessionOrReportToken(scopes.sameReport('id')), reportes.getById);
     app.get(process.env.PREFIX_API + '/reports/all/:campaign_id', sessionAuth, reportes.getAllByCampaign);
     app.post(process.env.PREFIX_API + '/reports/all/:page/:limit', sessionAuth, reportes.getAll);
     app.post(process.env.PREFIX_API + '/reports/save', sessionAuth, reportes.saveUpdate);
@@ -65,8 +70,9 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/reports/dashboard/:campaign_id', internalOrClientSessionAuth, reportes.getDashboardData);
 
     // OBJETIVOS SECUNDARIOS
-    app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, reportes.getSecondaryObjectivesByReportId);
-    app.post(process.env.PREFIX_API + '/reports/secondary_objectives/save/:report_id', sessionAuth, reportes.saveUpdateSecondaryObjectives);
+    // KPI (objetivos secundarios) del reporte: ver/editar es exclusivo de admin y superadmin.
+    app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, requireRole('admin', 'superadmin'), reportes.getSecondaryObjectivesByReportId);
+    app.post(process.env.PREFIX_API + '/reports/secondary_objectives/save/:report_id', sessionAuth, requireRole('admin', 'superadmin'), reportes.saveUpdateSecondaryObjectives);
 
     // GENERO
     app.get(process.env.PREFIX_API + '/reports/gender/:report_id', sessionAuth, reportes.getGenderByReportId);
@@ -81,31 +87,33 @@ module.exports = (app) => {
     app.post(process.env.PREFIX_API + '/reports/hours/save/:report_id', sessionAuth, reportes.saveUpdateHours);
 
     // VIEW ADS
-    app.get(process.env.PREFIX_API + '/reports/view_ads/:report_id', sessionAuth, reportes.getViewAdsByReportId);
+    app.get(process.env.PREFIX_API + '/reports/view_ads/:report_id', sessionOrReportToken(scopes.sameReport('report_id')), reportes.getViewAdsByReportId);
     app.post(process.env.PREFIX_API + '/reports/view_ads/save/:report_id', sessionAuth, reportes.saveUpdateViewAds);
     app.post(process.env.PREFIX_API + '/reports/view_ads/upload_image/:report_id', sessionAuth, upload.single('ad_image'), reportes.uploadAdImage);
     app.delete(process.env.PREFIX_API + '/reports/view_ads/delete_image/:id', sessionAuth, reportes.deleteAdImage);
+    app.put(process.env.PREFIX_API + '/reports/view_ads/update/:id', sessionAuth, reportes.updateViewAd);
 
     // DÍAS DE REPORTES
     app.get(process.env.PREFIX_API + '/reports/days/:report_id', sessionAuth, reportes.getDaysByReportId);
-    app.put(process.env.PREFIX_API + '/reports/day/update', reportes.updateReporteDia);
-    app.post(process.env.PREFIX_API + '/reports/day/review/:page/:limit', reportes.reporteDiasReview);
+    app.put(process.env.PREFIX_API + '/reports/day/update', sessionAuth, reportes.updateReporteDia);
+    app.post(process.env.PREFIX_API + '/reports/day/review/:page/:limit', sessionAuth, reportes.reporteDiasReview);
     app.put(process.env.PREFIX_API + '/reports/days/update_all/:report_id', sessionAuth, reportes.updateAllDaysByReportAndObjetivo);
 
     // MAPA
     app.get(process.env.PREFIX_API + '/reports/map/:report_id', sessionAuth, reportes.getMapByReportID);
 
     // PLATAFORMAS
-    app.get(process.env.PREFIX_API + '/platforms/all', sessionAuth, plataformas.getAll);
+    app.get(process.env.PREFIX_API + '/platforms/all', sessionOrReportToken(scopes.catalog), plataformas.getAll);
     // Administración de plataformas (admin/superadmin): nunca se borran, solo se desactivan.
     app.get(process.env.PREFIX_API + '/platforms/admin/all', sessionAuth, requireRole('admin', 'superadmin'), plataformas.getAllAdmin);
     app.post(process.env.PREFIX_API + '/platforms/create', sessionAuth, requireRole('admin', 'superadmin'), plataformas.create);
     app.put(process.env.PREFIX_API + '/platforms/update/:id', sessionAuth, requireRole('admin', 'superadmin'), plataformas.update);
 
     // OBJETIVOS
-    app.get(process.env.PREFIX_API + '/objectives/all', sessionAuth, objetivos.getAll);
-    app.post(process.env.PREFIX_API + '/objectives/create', sessionAuth, objetivos.create);
-    app.put(process.env.PREFIX_API + '/objectives/update/:id', sessionAuth, objetivos.update);
+    app.get(process.env.PREFIX_API + '/objectives/all', sessionOrReportToken(scopes.catalog), objetivos.getAll);
+    // Crear/editar/activar tipos de KPI (catálogo): admin y superadmin. Listarlos (arriba) lo usa cualquier usuario.
+    app.post(process.env.PREFIX_API + '/objectives/create', sessionAuth, requireRole('admin', 'superadmin'), objetivos.create);
+    app.put(process.env.PREFIX_API + '/objectives/update/:id', sessionAuth, requireRole('admin', 'superadmin'), objetivos.update);
 
     // SEGMENTACION
     app.get(process.env.PREFIX_API + '/segmentations/all/:report_id', sessionAuth, segmentaciones.getAllByReportId);

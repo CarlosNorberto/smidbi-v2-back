@@ -1,4 +1,4 @@
-const { sessionAuth } = require('../../auth/middleware');
+const { sessionAuth, requireRole } = require('../../auth/middleware');
 const etapas = require('../../controllers/lead_manager/stages');
 const deals = require('../../controllers/lead_manager/deals');
 const estados = require('../../controllers/lead_manager/status');
@@ -14,9 +14,9 @@ module.exports=(app)=>{
 
     // STAGES (ETAPAS)
     app.get(process.env.PREFIX_API + '/lead_manager/stages/all', sessionAuth, etapas.getAll);   
-    app.patch(process.env.PREFIX_API + '/lead_manager/stages/reorder', sessionAuth, etapas.reorder);
-    app.put(process.env.PREFIX_API + '/lead_manager/stages/update/:id', sessionAuth, etapas.update);
-    app.post(process.env.PREFIX_API + '/lead_manager/stages/create', sessionAuth, etapas.create);
+    app.patch(process.env.PREFIX_API + '/lead_manager/stages/reorder', sessionAuth, requireRole('admin', 'superadmin'), etapas.reorder);
+    app.put(process.env.PREFIX_API + '/lead_manager/stages/update/:id', sessionAuth, requireRole('admin', 'superadmin'), etapas.update);
+    app.post(process.env.PREFIX_API + '/lead_manager/stages/create', sessionAuth, requireRole('admin', 'superadmin'), etapas.create);
 
     // DEALS (NEGOCIOS)
     app.get(process.env.PREFIX_API + '/lead_manager/deals/by_stage', sessionAuth, deals.getByStage);     
@@ -35,6 +35,10 @@ module.exports=(app)=>{
 
     // CUSTOMER TEMPERATURE
     app.get(process.env.PREFIX_API + '/lead_manager/customer_temperature/all', sessionAuth, customer_temperature.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/customer_temperature/create', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.create);
+    app.put(process.env.PREFIX_API + '/lead_manager/customer_temperature/update/:id', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.update);
+    app.patch(process.env.PREFIX_API + '/lead_manager/customer_temperature/reorder', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.reorder);
+    app.delete(process.env.PREFIX_API + '/lead_manager/customer_temperature/remove/:id', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.remove);
 
     // HISTORIAL DE PROSPECTOS
     app.get(process.env.PREFIX_API + '/lead_manager/prospect_history/one/:id', sessionAuth, prospect_history.getById);

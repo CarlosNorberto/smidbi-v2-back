@@ -1,7 +1,7 @@
 const md = require('../../models');
 const { Op } = require('sequelize');
 const { DateTime } = require('luxon');
-const { isBefore, addDays, parseISO } = require('date-fns');
+const { isBefore, addDays, parseISO, format } = require('date-fns');
 const {
     getUploadUrl,
     getUploadPath,
@@ -16,21 +16,34 @@ const path = require('path');
 const crypto = require('crypto');
 const sharp = require('sharp');
 const cloudinary = require('cloudinary').v2;
+const { canManageReport, canManageCampaign, getCampaignOwnerId, denyAccess } = require('../../auth/ownership');
+const { notifyReportCreated } = require('../../services/reportCreatedNotification');
 
 // ************** REPORTS
+
+// Columnas que puede leer quien entra SOLO con el token del aviso de WhatsApp (sin sesión): las que pide la
+// pantalla del reporte en solo lectura. Con sesión se puede pedir cualquier columna, como siempre.
+const GUEST_REPORT_ATTRIBUTES = [
+    'id', 'nombre', 'fecha_ini', 'fecha_fin', 'presupuesto', 'objetivo_proyectado',
+    'id_plataforma', 'id_objetivo', 'cp', 'ctr', 'activo', 'frecuencia',
+];
 
 const getById = async (req, res) => {
     try {
         const { id } = req.params;
         let { attributes } = req.query;
         attributes = attributes ? attributes.split(',') : null;
+        if (req.reportAccess && attributes) {
+            attributes = attributes.filter((a) => GUEST_REPORT_ATTRIBUTES.includes(a));
+            if (attributes.length === 0) attributes = null;
+        }
         const reporte = await md.reportes.findOne({
             where: {
                 id: id,
             },
             attributes: attributes
                 ? attributes
-                : ['id', 'nombre', 'descripcion'],
+                : ['id', 'nombre'], // (antes pedía 'descripcion', que reportes no tiene: sin ?attributes daba error 500)
         });
         if (!reporte) {
             return res.status(404).json({ message: 'Reporte no encontrado' });
@@ -46,7 +59,7 @@ const getById = async (req, res) => {
 const getAllByCampaign = async (req, res) => {
     try {
         const { campaign_id } = req.params;
-        const { page = 1, limit = 10, name = null } = req.query;
+        const { page = 1, limit = 10, name = null, year = null, month = null } = req.query;
         const offset = (page - 1) * limit;
         let where = {
             id_campana: campaign_id,
@@ -54,6 +67,19 @@ const getAllByCampaign = async (req, res) => {
         if (name) {
             where.nombre = {
                 [md.Sequelize.Op.iLike]: `%${name}%`,
+            };
+        }
+        // Filtro opcional por mes/año de inicio del reporte (fecha_ini).
+        if (year && month) {
+            const y = Number.parseInt(year, 10);
+            const m = Number.parseInt(month, 10);
+            if (!Number.isInteger(y) || !Number.isInteger(m) || y < 2000 || y > 2100 || m < 1 || m > 12) {
+                return res.status(400).json({ message: 'El año y el mes no son válidos.' });
+            }
+            const lastDay = new Date(y, m, 0).getDate();
+            const mm = String(m).padStart(2, '0');
+            where.fecha_ini = {
+                [md.Sequelize.Op.between]: [`${y}-${mm}-01`, `${y}-${mm}-${String(lastDay).padStart(2, '0')}`],
             };
         }
         const reportes = await md.reportes
@@ -171,24 +197,64 @@ const getAll = async (req, res) => {
     }
 };
 
+// Campos que el cliente nunca puede fijar por el body. En particular
+// `id_usuario` (responsable del reporte) se asigna al crearlo y NO cambia al
+// editar: antes cada guardado lo pisaba con el usuario que editaba y el reporte
+// "cambiaba de dueño". `id_campana` tampoco se mueve al editar.
+const REPORT_PROTECTED_FIELDS = [
+    'id_usuario',
+    'usuario_creacion',
+    'usuario_modificacion',
+    'usuario_eliminacion',
+    'fecha_creacion',
+    'fecha_modificacion',
+    'fecha_eliminacion',
+];
+
+// Un reporte no se puede reactivar mientras su campaña esté inactiva (el cliente
+// seguiría sin acceso y el estado quedaría inconsistente).
+const INACTIVE_CAMPAIGN_ERROR = {
+    message: 'No se puede reactivar el reporte porque su campaña está inactiva. Reactive primero la campaña.',
+};
+const isCampaignActive = async (campaignId, transaction = null) => {
+    const campana = await md.campanas.findByPk(campaignId, { attributes: ['activo'], transaction });
+    return !campana || campana.activo !== false;
+};
+
 const saveUpdate = async (req, res) => {
+    const transaction = await md.sequelize.transaction();
     try {
-        let body = req.body;
-        body.id_usuario = req.user.id;
+        const body = { ...req.body };
+        REPORT_PROTECTED_FIELDS.forEach((field) => delete body[field]);
         const isNewReport = !body.id;
         let report = null;
         let previousFechaIni = null;
         let previousFechaFin = null;
+        let previousObjetivo = null;
 
         if (!isNewReport) {
-            report = await md.reportes.findByPk(body.id);
+            report = await md.reportes.findByPk(body.id, { transaction });
             if (!report) {
+                await transaction.rollback();
                 return res.status(404).json({
                     message: 'No se encontró el reporte para actualizar',
                 });
             }
+            if (!(await canManageReport(req.user, report.id))) {
+                await transaction.rollback();
+                return denyAccess(res);
+            }
+            delete body.id_campana;
+            if (body.activo === true && report.activo === false && !(await isCampaignActive(report.id_campana, transaction))) {
+                await transaction.rollback();
+                return res.status(409).json(INACTIVE_CAMPAIGN_ERROR);
+            }
             previousFechaIni = report.fecha_ini;
             previousFechaFin = report.fecha_fin;
+            previousObjetivo = report.id_objetivo;
+        } else if (!(await canManageCampaign(req.user, body.id_campana))) {
+            await transaction.rollback();
+            return denyAccess(res);
         }
 
         // fecha_ini/fecha_fin viajan como 'YYYY-MM-DD' (fecha calendario, sin
@@ -212,32 +278,63 @@ const saveUpdate = async (req, res) => {
         }
 
         if (isNewReport) {
+            // El responsable es el de la empresa (no quien lo crea) y queda fijo.
             body.usuario_creacion = req.user.id;
-            report = await md.reportes.create(body);
+            body.id_usuario = (await getCampaignOwnerId(body.id_campana)) ?? req.user.id;
+            report = await md.reportes.create(body, { transaction });
         } else {
-            await report.update(body);
+            body.usuario_modificacion = req.user.id;
+            body.fecha_modificacion = new Date();
+            await report.update(body, { transaction });
         }
 
-        if (datesChanged && finalFechaIni && finalFechaFin) {
+        // Los días son por (reporte, objetivo). Si cambió el rango, se
+        // regeneran para el objetivo actual. Si solo cambió el objetivo
+        // principal, se crean únicamente si ese objetivo aún no tiene días
+        // (para no borrar valores que ya existan, p. ej. de un objetivo que
+        // antes era secundario).
+        const objectiveChanged =
+            !isNewReport &&
+            body.id_objetivo !== undefined &&
+            body.id_objetivo !== null &&
+            Number(body.id_objetivo) !== Number(previousObjetivo);
+
+        if (finalFechaIni && finalFechaFin && (datesChanged || objectiveChanged)) {
             await createDaysForReport(
                 report.id,
-                body.id_objetivo ?? report.id_objetivo,
+                report.id_objetivo,
                 finalFechaIni,
                 finalFechaFin,
                 req.user.id,
+                transaction,
+                !datesChanged,
             );
         }
+
+        await transaction.commit();
+
+        // Aviso por WhatsApp de "Nuevo reporte creado" (solo al crear, ya con todo guardado). Sin await a
+        // propósito: no demora la respuesta y nunca falla hacia quien crea el reporte; si nadie está
+        // suscrito al proceso no hace nada (ver services/reportCreatedNotification.js).
+        if (isNewReport) notifyReportCreated(report.id);
+
         res.status(200).json({
             message: 'Reporte guardado correctamente',
             data: report,
         });
     } catch (error) {
+        if (!transaction.finished) await transaction.rollback();
         res.status(500).json({
             message: `Error al guardar el reporte ${error.message}`,
         });
     }
 };
 
+// Genera los días del rango para (reporte, objetivo). Los errores se propagan
+// a propósito: antes se registraban y se tragaban, y el reporte se guardaba
+// "con éxito" pero con los días borrados o sin crear. Quien llama decide si
+// revertir (ambos llamadores trabajan dentro de una transacción).
+// `onlyIfMissing`: no hace nada si el objetivo ya tiene días cargados.
 const createDaysForReport = async (
     reportId,
     objetivoId,
@@ -245,44 +342,47 @@ const createDaysForReport = async (
     dateEnd,
     user_id,
     transaction = null,
+    onlyIfMissing = false,
 ) => {
-    try {
-        // dateInit/dateEnd llegan como 'YYYY-MM-DD' (fecha calendario) o ya
-        // como Date. parseISO trata un string solo-fecha como medianoche
-        // LOCAL (no UTC), por lo que el día no se desplaza sin importar la
-        // timezone del proceso de Node.
-        let current =
-            typeof dateInit === 'string' ? parseISO(dateInit) : dateInit;
-        const end = typeof dateEnd === 'string' ? parseISO(dateEnd) : dateEnd;
-
-        await md.reporte_dia.destroy({
-            where: {
-                id_reporte: reportId,
-                id_objetivo: objetivoId,
-            },
+    if (onlyIfMissing) {
+        const existing = await md.reporte_dia.count({
+            where: { id_reporte: reportId, id_objetivo: objetivoId },
             transaction,
         });
+        if (existing > 0) return;
+    }
 
-        const days = [];
-        while (isBefore(current, addDays(end, 1))) {
-            days.push({
-                id_reporte: reportId,
-                id_objetivo: objetivoId,
-                dia: current.getDate(),
-                mes: current.getMonth() + 1,
-                anio: current.getFullYear(),
-                valor: 0,
-                usuario_creacion: user_id,
-            });
-            current = addDays(current, 1);
-        }
-        if (days.length > 0) {
-            await md.reporte_dia.bulkCreate(days, { transaction });
-        }
-    } catch (error) {
-        console.error(
-            `Error al crear/actualizar días para el reporte ${reportId}: ${error.message}`,
-        );
+    // dateInit/dateEnd llegan como 'YYYY-MM-DD' (fecha calendario) o ya
+    // como Date. parseISO trata un string solo-fecha como medianoche
+    // LOCAL (no UTC), por lo que el día no se desplaza sin importar la
+    // timezone del proceso de Node.
+    let current =
+        typeof dateInit === 'string' ? parseISO(dateInit) : dateInit;
+    const end = typeof dateEnd === 'string' ? parseISO(dateEnd) : dateEnd;
+
+    await md.reporte_dia.destroy({
+        where: {
+            id_reporte: reportId,
+            id_objetivo: objetivoId,
+        },
+        transaction,
+    });
+
+    const days = [];
+    while (isBefore(current, addDays(end, 1))) {
+        days.push({
+            id_reporte: reportId,
+            id_objetivo: objetivoId,
+            dia: current.getDate(),
+            mes: current.getMonth() + 1,
+            anio: current.getFullYear(),
+            valor: 0,
+            usuario_creacion: user_id,
+        });
+        current = addDays(current, 1);
+    }
+    if (days.length > 0) {
+        await md.reporte_dia.bulkCreate(days, { transaction });
     }
 };
 
@@ -320,7 +420,7 @@ const buildReportCopyData = (sourceReport, overrides, userId) => {
         ...data,
         ...REPORT_COPY_RESET_FIELDS,
         usuario_creacion: userId,
-        id_usuario: userId,
+        // El responsable lo fija copyReportWithChildren (dueño de la empresa); `userId` es solo quien copia.
         ...overrides,
     };
 };
@@ -375,27 +475,73 @@ const copyReportChildren = async (sourceReportId, newReportId, userId, transacti
 // transacción. `overrides` define lo que cambia respecto al original
 // (nombre, campaña destino, fechas, etc.).
 const copyReportWithChildren = async (sourceReport, overrides, userId, transaction) => {
-    const data = buildReportCopyData(sourceReport, overrides, userId);
+    // El responsable de la copia es el dueño de la empresa, NUNCA quien copia. Quien llama puede pasarlo ya
+    // resuelto (`overrides.id_usuario`, p. ej. al copiar una campaña entera: la campaña nueva aún no es visible
+    // fuera de la transacción); si no lo pasa, se calcula acá, así ningún llamador nuevo puede olvidarlo.
+    const ownerId = overrides.id_usuario
+        ?? (await getCampaignOwnerId(overrides.id_campana ?? sourceReport.id_campana))
+        ?? sourceReport.id_usuario;
+    const data = buildReportCopyData(sourceReport, { ...overrides, id_usuario: ownerId }, userId);
     const newReport = await md.reportes.create(data, { transaction });
     await copyReportChildren(sourceReport.id, newReport.id, userId, transaction);
     return newReport;
 };
 
+// 'YYYY-MM-DD' que además sea una fecha real (no 2026-02-31).
+const isValidDateOnly = (value) => {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = parseISO(value);
+    return !Number.isNaN(parsed.getTime()) && format(parsed, 'yyyy-MM-dd') === value;
+};
+
 const copyReport = async (req, res) => {
     const transaction = await md.sequelize.transaction();
     try {
-        const { id, nombre, fecha_ini, fecha_fin } = req.body;
-        if (!id || !nombre) {
+        const { id, fecha_ini, fecha_fin } = req.body;
+        const nombre = typeof req.body.nombre === 'string' ? req.body.nombre.trim() : '';
+        const reject = async (message) => {
             await transaction.rollback();
-            return res.status(400).json({ message: 'Debe indicar el reporte de origen y un nombre.' });
+            return res.status(400).json({ message });
+        };
+
+        if (!Number.isInteger(Number(id)) || !nombre) {
+            return reject('Debe indicar el reporte de origen y un nombre.');
         }
+        if (nombre.length > 200) {
+            return reject('El nombre no puede superar los 200 caracteres.');
+        }
+        // Las fechas son opcionales, pero si vienen deben ser las dos, válidas y en orden:
+        // antes un valor mal formado terminaba en un error 500 al guardar.
+        if ((fecha_ini && !isValidDateOnly(fecha_ini)) || (fecha_fin && !isValidDateOnly(fecha_fin))) {
+            return reject('Las fechas deben ser válidas y tener formato AAAA-MM-DD.');
+        }
+        if (!!fecha_ini !== !!fecha_fin) {
+            return reject('Indique la fecha de inicio y la de fin, o deje ambas vacías.');
+        }
+        if (fecha_ini && fecha_fin && fecha_fin < fecha_ini) {
+            return reject('La fecha de fin no puede ser anterior a la de inicio.');
+        }
+
         const sourceReport = await md.reportes.findByPk(id, { transaction });
         if (!sourceReport) {
             await transaction.rollback();
             return res.status(404).json({ message: 'No se encontró el reporte a copiar' });
         }
+        if (!(await canManageReport(req.user, sourceReport.id))) {
+            await transaction.rollback();
+            return denyAccess(res);
+        }
 
-        const overrides = { nombre, id_campana: sourceReport.id_campana };
+        // Una copia nace activa, salvo que su campaña esté inactiva: un reporte no puede estar
+        // activo bajo una campaña inactiva (ver la regla de reactivación en enableDisableReport).
+        const campana = await md.campanas.findByPk(sourceReport.id_campana, { attributes: ['activo'], transaction });
+        const overrides = {
+            nombre,
+            id_campana: sourceReport.id_campana,
+            activo: !campana || campana.activo !== false,
+            // La copia queda a nombre del responsable de la empresa, no de quien copia.
+            id_usuario: (await getCampaignOwnerId(sourceReport.id_campana)) ?? req.user.id,
+        };
         if (fecha_ini) {
             overrides.fecha_ini = fecha_ini;
             overrides.fecha_inicio = parseISO(fecha_ini);
@@ -428,6 +574,12 @@ const enableDisableReport = async (req, res) => {
                 .status(404)
                 .json({ message: 'No se encontró el reporte' });
         }
+        if (!(await canManageReport(req.user, report.id))) {
+            return denyAccess(res);
+        }
+        if (!report.activo && !(await isCampaignActive(report.id_campana))) {
+            return res.status(409).json(INACTIVE_CAMPAIGN_ERROR);
+        }
         report.activo = !report.activo;
         await report.save();
         res.status(200).json({
@@ -441,6 +593,14 @@ const enableDisableReport = async (req, res) => {
     }
 };
 
+const countRows = async (table, column, id) => {
+    const [row] = await md.sequelize.query(
+        `SELECT COUNT(*)::int AS count FROM ${table} WHERE ${column} = :id`,
+        { replacements: { id }, type: md.Sequelize.QueryTypes.SELECT },
+    );
+    return row.count;
+};
+
 const deleteReport = async (req, res) => {
     try {
         const { id } = req.params;
@@ -450,7 +610,38 @@ const deleteReport = async (req, res) => {
                 .status(404)
                 .json({ message: 'No se encontró el reporte para eliminar' });
         }
-        await report.destroy();
+        if (!(await canManageReport(req.user, report.id))) {
+            return denyAccess(res);
+        }
+
+        // tasks_cards y anuncios referencian al reporte sin ON DELETE CASCADE:
+        // antes el borrado fallaba con un error de clave foránea. Se avisa con un
+        // mensaje claro en vez de borrar tareas o anuncios en silencio.
+        const [tareas, anuncios] = await Promise.all([
+            countRows('tasks_cards', 'report_id', report.id),
+            countRows('anuncios', 'report_id', report.id),
+        ]);
+        if (tareas > 0 || anuncios > 0) {
+            const partes = [];
+            if (tareas > 0) partes.push(`${tareas} tarea(s)`);
+            if (anuncios > 0) partes.push(`${anuncios} anuncio(s)`);
+            return res.status(409).json({
+                message: `No se puede eliminar el reporte porque tiene ${partes.join(' y ')} asociado(s). Elimine primero esos elementos o deshabilite el reporte.`,
+            });
+        }
+
+        // interaccion_edad y funnel_stage no tienen FK hacia reportes: se borran
+        // a mano para no dejar filas huérfanas (el resto cae por ON DELETE CASCADE).
+        const transaction = await md.sequelize.transaction();
+        try {
+            await md.interaccion_edad.destroy({ where: { id_reporte: report.id }, transaction });
+            await md.funnel_stage.destroy({ where: { id_reporte: report.id }, transaction });
+            await report.destroy({ transaction });
+            await transaction.commit();
+        } catch (error) {
+            await transaction.rollback();
+            throw error;
+        }
         res.status(200).json({ message: 'Reporte eliminado correctamente' });
     } catch (error) {
         res.status(500).json({
@@ -479,28 +670,44 @@ const getSecondaryObjectivesByReportId = async (req, res) => {
 };
 
 const saveUpdateSecondaryObjectives = async (req, res) => {
-    try {
-        const objetivos = req.body;
-        const { report_id } = req.params;
+    const objetivos = req.body;
+    const { report_id } = req.params;
 
-        // Eliminar objetivos secundarios existentes
+    // Se reemplaza TODA la lista (borrar y recrear): se valida antes de tocar nada.
+    if (!Array.isArray(objetivos)) {
+        return res.status(400).json({ message: 'Se esperaba una lista de objetivos secundarios.' });
+    }
+    // `valor` es BIGINT en la base: solo enteros (un decimal fallaba al insertar, a mitad del guardado).
+    const invalido = objetivos.find(
+        (o) => !o || !Number.isInteger(Number(o.id_objetivo)) || (o.valor !== null && o.valor !== undefined && !Number.isInteger(Number(o.valor))),
+    );
+    if (invalido !== undefined) {
+        return res.status(400).json({ message: 'Cada KPI secundario necesita un KPI válido y un valor numérico entero.' });
+    }
+
+    // En una transacción: antes, si fallaba una inserción a mitad de camino, el reporte
+    // se quedaba sin sus KPI (ya se habían borrado).
+    const transaction = await md.sequelize.transaction();
+    try {
         await md.reporte_objetivos_secundarios.destroy({
             where: { id_reporte: report_id },
+            transaction,
         });
 
-        // Agregar nuevos objetivos secundarios
         for (const objetivo of objetivos) {
             await md.reporte_objetivos_secundarios.create({
                 id_reporte: report_id,
                 id_objetivo: objetivo.id_objetivo,
                 valor: objetivo.valor,
-            });
+            }, { transaction });
         }
 
+        await transaction.commit();
         res.status(200).json({
             message: 'Objetivos secundarios actualizados correctamente.',
         });
     } catch (error) {
+        if (!transaction.finished) await transaction.rollback();
         res.status(500).json({
             message: `Error al actualizar los objetivos secundarios ${error.message}`,
         });
@@ -595,6 +802,9 @@ const updateAllDaysByReportAndObjetivo = async (req, res) => {
 const updateReporteDia = async (req, res) => {
     try {
         const { id, valor, id_reporte } = req.body;
+        if (!Number.isInteger(Number(id)) || !Number.isFinite(Number(valor))) {
+            return res.status(400).send({ message: 'El id y el valor del día deben ser numéricos.' });
+        }
         await md.reporte_dia.update(
             {
                 valor: valor,
@@ -982,13 +1192,23 @@ const deleteAdImage = async (req, res) => {
             });
         }
 
-        if (viewAd.image_url) {
-            await cloudinary.uploader.destroy(viewAd.image_url);
-        } else if (viewAd.imagen && process.env.LEGACY_ADS_UPLOADS_PATH) {
-            const filePath = path.join(process.env.LEGACY_ADS_UPLOADS_PATH, viewAd.imagen);
-            await fs.promises.unlink(filePath).catch(() => {
-                // si el archivo ya no está en disco, igual se elimina el registro
-            });
+        // Al copiar un reporte, los anuncios de la copia apuntan al MISMO archivo que los del
+        // original. Solo se borra el archivo cuando ningún otro anuncio lo usa; si no, quitar un
+        // anuncio de la copia dejaba rota la imagen del original (y al revés).
+        const fileColumn = viewAd.image_url ? 'image_url' : viewAd.imagen ? 'imagen' : null;
+        const sharedWithOthers = fileColumn
+            ? (await md.view_ads.count({ where: { id: { [Op.ne]: viewAd.id }, [fileColumn]: viewAd[fileColumn] } })) > 0
+            : false;
+
+        if (!sharedWithOthers) {
+            if (viewAd.image_url) {
+                await cloudinary.uploader.destroy(viewAd.image_url);
+            } else if (viewAd.imagen && process.env.LEGACY_ADS_UPLOADS_PATH) {
+                const filePath = path.join(process.env.LEGACY_ADS_UPLOADS_PATH, viewAd.imagen);
+                await fs.promises.unlink(filePath).catch(() => {
+                    // si el archivo ya no está en disco, igual se elimina el registro
+                });
+            }
         }
         await viewAd.destroy();
 
@@ -1003,6 +1223,61 @@ const deleteAdImage = async (req, res) => {
 };
 
 // ************** REPORT MAP
+
+// Guarda el título y/o el enlace de UN anuncio (view_ads). Se llama al instante desde el
+// modal "Editar Anuncio": no depende de "Guardar todo". Solo se tocan los campos que vienen
+// en el body; un texto vacío los limpia.
+const updateViewAd = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const viewAd = await md.view_ads.findByPk(id);
+        if (!viewAd) {
+            return res.status(404).json({ message: 'No se encontró el anuncio.' });
+        }
+        if (!(await canManageReport(req.user, viewAd.id_reporte))) {
+            return denyAccess(res);
+        }
+
+        const updates = {};
+        if ('title' in req.body) {
+            const title = String(req.body.title ?? '').trim();
+            if (title.length > 300) {
+                return res.status(400).json({ message: 'El título no puede superar los 300 caracteres.' });
+            }
+            updates.title = title || null;
+        }
+        if ('link_end_point' in req.body) {
+            const link = String(req.body.link_end_point ?? '').trim();
+            if (link) {
+                // Solo enlaces http(s): el enlace se muestra como <a href> al cliente.
+                let parsed;
+                try {
+                    parsed = new URL(link);
+                } catch {
+                    parsed = null;
+                }
+                if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) {
+                    return res.status(400).json({ message: 'La URL del anuncio no es válida (debe empezar con http:// o https://).' });
+                }
+            }
+            updates.link_end_point = link || null;
+        }
+
+        await viewAd.update({
+            ...updates,
+            usuario_modificacion: req.user.id,
+            fecha_modificacion: new Date(),
+        });
+        res.status(200).json({
+            message: 'Anuncio actualizado correctamente.',
+            data: { id: viewAd.id, title: viewAd.title, link_end_point: viewAd.link_end_point },
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: `Error al actualizar el anuncio ${error.message}`,
+        });
+    }
+};
 
 const getMapByReportID = async (req, res) => {
     try {
@@ -1483,10 +1758,20 @@ const reporteDiasReview = async (req, res) => {
                 .send({ message: 'El año y el mes son obligatorios.' });
         }
 
-        // let days_in_month = moment(body.year + '-' + body.month).daysInMonth();
+        // year/month se interpolan más abajo en un `literal` de SQL: se
+        // fuerzan a enteros acotados para que nunca lleguen como texto libre.
+        const year = Number.parseInt(body.year, 10);
+        const month = Number.parseInt(body.month, 10);
+        if (!Number.isInteger(year) || !Number.isInteger(month) || year < 2000 || year > 2100 || month < 1 || month > 12) {
+            return res
+                .status(400)
+                .send({ message: 'El año y el mes no son válidos.' });
+        }
+
+        // let days_in_month = moment(year + '-' + month).daysInMonth();
         let days_in_month = DateTime.fromObject({
-            year: body.year,
-            month: body.month,
+            year,
+            month,
         }).daysInMonth;
 
         let query = {
@@ -1495,7 +1780,7 @@ const reporteDiasReview = async (req, res) => {
             // servicio:true,
             [md.Sequelize.Op.and]: [
                 md.sequelize.literal(
-                    `(fecha_inicio >= '${body.year}-${body.month}-1' AND fecha_inicio <= '${body.year}-${body.month}-${days_in_month}') OR (fecha_final >= '${body.year}-${body.month}-1' AND fecha_final <= '${body.year}-${body.month}-${days_in_month}')`,
+                    `(fecha_inicio >= '${year}-${month}-1' AND fecha_inicio <= '${year}-${month}-${days_in_month}') OR (fecha_final >= '${year}-${month}-1' AND fecha_final <= '${year}-${month}-${days_in_month}')`,
                 ),
             ],
         };
@@ -1678,6 +1963,7 @@ module.exports = {
     saveUpdateViewAds,
     uploadAdImage,
     deleteAdImage,
+    updateViewAd,
     getMapByReportID,
     reporteDiasReview,
     getDashboardData,

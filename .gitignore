@@ -6,6 +6,7 @@ server/config/config.json
 
 # Carpeta UPLOADS
 uploads/ads/*
+server/uploads/view-ads/*
 
 # Archivos de entorno
 .env
