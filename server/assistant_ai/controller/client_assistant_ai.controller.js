@@ -1,4 +1,5 @@
-const { getOpenAIClient } = require('../services/openai.service');
+const { getAI } = require('../providers');
+const { respondWithError } = require('../providers/ai_error');
 const { getClientSummaryRows } = require('../../controllers/campaign_manager/reportes');
 const { getFechaActualLaPaz } = require('../../helps');
 
@@ -24,13 +25,11 @@ async function handleClientChat(req, res) {
         const rows = await getClientSummaryRows(empresaId);
         const fechaActual = getFechaActualLaPaz();
 
-        const openai = await getOpenAIClient();
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-                {
-                    role: 'system',
-                    content: `Eres el asistente de campañas de una agencia de marketing digital, hablando
+        const ai = await getAI();
+        const message = await ai.complete({
+            tier: 'smart',
+            maxTokens: 800,
+            system: `Eres el asistente de campañas de una agencia de marketing digital, hablando
                         directamente con un cliente final (no con personal de la agencia).
                         Respóndele siempre de usted, en español neutro, de forma clara y concisa.
 
@@ -68,20 +67,13 @@ async function handleClientChat(req, res) {
                             claridad en vez de inventar algo.
 
                         No ofrezcas información adicional a la que se te pidió.`,
-                },
-                {
-                    role: 'user',
-                    content: `Hoy es ${fechaActual}.\nPregunta del cliente: "${question}"\nDatos de campañas de su empresa: ${JSON.stringify(rows, null, 2)}`,
-                },
-            ],
-            max_tokens: 800,
+            user: `Hoy es ${fechaActual}.\nPregunta del cliente: "${question}"\nDatos de campañas de su empresa: ${JSON.stringify(rows, null, 2)}`,
         });
 
-        const message = response.choices[0].message.content;
         return res.status(200).json({ message });
     } catch (error) {
         console.error('Error in client chat controller:', error);
-        res.status(500).json({ error: 'Ocurrió un error al procesar la pregunta' });
+        respondWithError(res, error, { audience: 'client', fallback: 'Ocurrió un error al procesar la pregunta' });
     }
 }
 

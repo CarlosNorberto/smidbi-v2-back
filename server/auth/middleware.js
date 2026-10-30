@@ -1,5 +1,6 @@
 const moment = require('moment-timezone');
 const md = require('../models');
+const { logEvent } = require('../services/systemEventService');
 
 /**
  * Middleware para autorizar las peticiones de sesión
@@ -27,6 +28,15 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
     if (userRole && allowedRoles.includes(userRole)) {
         return next();
     }
+    // Un usuario con sesión que intenta algo que su rol no permite (URL escrita a mano, rol cambiado...).
+    logEvent({
+        level: 'warning',
+        category: 'seguridad',
+        source: `${req.method} ${req.originalUrl.split('?')[0]}`,
+        message: `Acceso denegado: el rol "${userRole ?? 'sin rol'}" no puede usar esta ruta (requiere: ${allowedRoles.join(', ')})`,
+        req,
+        statusCode: 403,
+    });
     res.status(403).send({ message: 'Acceso denegado. No tiene permisos suficientes.' });
 }
 

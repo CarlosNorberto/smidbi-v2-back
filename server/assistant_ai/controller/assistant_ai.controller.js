@@ -1,4 +1,5 @@
-const extractEntities = require('../services/entityExtractor.service');
+const { respondWithError } = require('../providers/ai_error');
+const extractEntities =require('../services/entityExtractor.service');
 const getCatalog = require('../services/catalogSearch.service');
 const { generateClarification,
     generateNotFound } = require('../services/clarification.service');
@@ -95,7 +96,7 @@ async function handleChat(req, res) {
 
     } catch (error) {
         console.error('Error in chat controller:', error);
-        res.status(500).json({ error: 'Error processing request' });
+        respondWithError(res, error, { audience: 'internal', fallback: 'Ocurrió un error al procesar tu pregunta' });
     }
 }
 

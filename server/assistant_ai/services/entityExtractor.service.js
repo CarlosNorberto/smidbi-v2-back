@@ -1,15 +1,14 @@
-const { getOpenAIClient } = require('./openai.service');
+const { getAI } = require('../providers');
 const { getIntentNames, getIntentDescriptions } = require('../config/intents');
 
 const extractEntities = async (question) => {
-    const openai = await getOpenAIClient();
-    const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        response_format: { type: 'json_object' },
-        messages: [
-            {
-                role: 'system',
-                content: `Eres un extractor de entidades para un sistema interno
+    const ai = await getAI();
+    const raw = await ai.complete({
+        tier: 'fast',
+        json: true,
+        maxTokens: 200,
+        user: question,
+        system: `Eres un extractor de entidades para un sistema interno
                     de una agencia de marketing digital.
 
                     Tu tarea tiene DOS partes:
@@ -56,18 +55,10 @@ const extractEntities = async (question) => {
                     "unknown" es EXCLUSIVO para preguntas que NO contienen ningún nombre 
                     de campaña o empresa Y cuyo tema es completamente ajeno al marketing digital.
 
-                    Responde SOLO con el JSON, sin explicación.`
-            },
-            {
-                role: 'user',
-                content: question
-            }
-        ],
-        max_tokens: 200
+                    Responde SOLO con el JSON, sin explicación.`,
     });
 
     try {
-        const raw = response.choices[0].message.content;
         const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
 
         let intent = getIntentNames().includes(parsed.intent)

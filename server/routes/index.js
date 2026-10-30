@@ -11,6 +11,8 @@ const costoPor = require('../controllers/costo_por');
 const whatsapp = require('../controllers/whatsapp');
 const whatsappDestinatarios = require('../controllers/whatsapp_destinatarios');
 const contactSettings = require('../controllers/contact_settings');
+const systemEvents = require('../controllers/system_events');
+const notifications = require('../controllers/notifications');
 
 const multer = require('multer');
 const uploadQualifyImage = multer({
@@ -47,6 +49,9 @@ module.exports = (app) => {
     // UTILIDADES
     app.get(process.env.PREFIX_API + '/utilities/campaign_search', sessionAuth, utilities.campaignSearch);
     app.get(process.env.PREFIX_API + '/utilities/campaign_search/filters', sessionAuth, utilities.campaignSearchFilters);
+    app.get(process.env.PREFIX_API + '/utilities/report_search', sessionAuth, utilities.reportSearch);
+    app.get(process.env.PREFIX_API + '/utilities/report_search/filters', sessionAuth, utilities.reportSearchFilters);
+    app.get(process.env.PREFIX_API + '/utilities/category_search', sessionAuth, utilities.categorySearch);
     app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
 
     // CONFIGURACIONES GENERALES (acceso exclusivo para superadmin)
@@ -111,5 +116,14 @@ module.exports = (app) => {
     app.post(process.env.PREFIX_API + '/whatsapp_destinatarios/create', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.create);
     app.put(process.env.PREFIX_API + '/whatsapp_destinatarios/update/:id', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.update);
     app.delete(process.env.PREFIX_API + '/whatsapp_destinatarios/remove/:id', sessionAuth, requireRole('admin', 'superadmin'), whatsappDestinatarios.remove);
+
+    // NOTIFICACIONES "Otros" de la campanita (del usuario conectado). Literales antes de la dinámica ':id'.
+    app.get(process.env.PREFIX_API + '/notifications', sessionAuth, notifications.getMine);
+    app.put(process.env.PREFIX_API + '/notifications/read_all', sessionAuth, notifications.markAllAsRead);
+    app.put(process.env.PREFIX_API + '/notifications/:id/read', sessionAuth, notifications.markAsRead);
+
+    // REGISTRO DE ERRORES (Configuraciones > Registro de errores) — SOLO superadmin
+    app.get(process.env.PREFIX_API + '/system_events/categories', sessionAuth, requireRole('superadmin'), systemEvents.getCategories);
+    app.get(process.env.PREFIX_API + '/system_events', sessionAuth, requireRole('superadmin'), systemEvents.getAll);
 
 }

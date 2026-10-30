@@ -62,7 +62,7 @@ const buildReportVisibility = (user) => {
  * @param {*} res - Response con resultados de búsqueda de reportes que coinciden con el query, incluyendo información de campaña, categoría y empresa, ordenados por activos primero y luego por fecha de fin más reciente. Si 'q' no se proporciona o es muy corto, devuelve un array vacío.
  * @returns - JSON con resultados de búsqueda de reportes que coinciden con el query, incluyendo información de campaña, categoría y empresa, ordenados por activos primero y luego por fecha de fin más reciente. Si 'q' no se proporciona o es muy corto, devuelve un array vacío.
  */
-const campaignSearch = async (req, res) => {
+const reportSearch = async (req, res) => {
     try {
         const { q, year, category_id } = req.query;
 
@@ -166,7 +166,7 @@ const campaignSearch = async (req, res) => {
  * acotan a las que realmente tienen coincidencias con esa búsqueda, en lugar de
  * mostrar siempre el listado completo.
  */
-const campaignSearchFilters = async (req, res) => {
+const reportSearchFilters = async (req, res) => {
     try {
         const { q, year } = req.query;
         const hasQuery = q && q.length >= 2;
@@ -179,42 +179,11 @@ const campaignSearchFilters = async (req, res) => {
         // desde categorias, porque anidar el where dentro de un include de 2 niveles con
         // attributes: [] rompe el armado del objeto anidado en Sequelize (categoria queda
         // undefined). Acá se arma el listado deduplicando en JS.
-        const [reportesForYears, reportesForCategories] = await Promise.all([
-            md.reportes.findAll({
-                where: { [Op.and]: [...visibilityCondition, ...nameCondition] },
-                attributes: ['fecha_ini', 'fecha_fin'],
-                raw: true,
-            }),
-            md.reportes.findAll({
-                where: {
-                    [Op.and]: [
-                        ...visibilityCondition,
-                        ...nameCondition,
-                        ...(year ? [buildYearCondition(year)] : []),
-                    ]
-                },
-                attributes: ['id'],
-                include: [
-                    {
-                        model: md.campanas,
-                        as: 'campana',
-                        attributes: ['id'],
-                        required: true,
-                        include: [
-                            {
-                                model: md.categorias,
-                                as: 'categoria',
-                                attributes: ['id', 'nombre'],
-                                required: true,
-                                include: [
-                                    { model: md.empresas, as: 'empresa', attributes: ['id', 'nombre'] }
-                                ]
-                            }
-                        ]
-                    }
-                ],
-            }),
-        ]);
+        const reportesForYears = await md.reportes.findAll({
+            where: { [Op.and]: [...visibilityCondition, ...nameCondition] },
+            attributes: ['fecha_ini', 'fecha_fin'],
+            raw: true,
+        });
 
         const yearsSet = new Set();
         reportesForYears.forEach((r) => {
@@ -222,22 +191,7 @@ const campaignSearchFilters = async (req, res) => {
             if (r.fecha_fin) yearsSet.add(new Date(r.fecha_fin).getFullYear());
         });
 
-        const categoriesMap = new Map();
-        reportesForCategories.forEach((r) => {
-            const categoria = r.campana?.categoria;
-            if (categoria && !categoriesMap.has(categoria.id)) {
-                categoriesMap.set(categoria.id, {
-                    id: categoria.id,
-                    nombre: categoria.nombre,
-                    empresa: categoria.empresa?.nombre,
-                });
-            }
-        });
-
-        return res.json({
-            years: Array.from(yearsSet).sort((a, b) => b - a),
-            categories: Array.from(categoriesMap.values()).sort((a, b) => a.nombre.localeCompare(b.nombre)),
-        });
+        return res.json({ years: Array.from(yearsSet).sort((a, b) => b - a) });
     } catch (error) {
         res.status(500).json({ error: 'Error al obtener filtros de búsqueda' });
     }
@@ -284,14 +238,221 @@ const companySearch = async (req, res) => {
     }
 };
 
+/**
+ * Búsqueda de CATEGORÍAS (2.º nivel): el texto se compara con el nombre de la categoría o de su empresa. Lleva a la
+ * lista de campañas de la categoría. Visibilidad: admin/superadmin ven todas; el resto, las de sus empresas.
+ */
+const categorySearch = async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q || q.length < 2) {
+            return res.json({ results: [] });
+        }
+        const conditions = [
+            { [Op.or]: [buildNameCondition(q, 'categorias.nombre'), buildNameCondition(q, 'empresa.nombre')] },
+        ];
+        const seesAll = isUnrestricted(req.user);
+        if (!seesAll) {
+            conditions.push({ '$empresa.id_usuario$': Number(req.user.id) });
+        }
+        const categorias = await md.categorias.findAll({
+            where: { [Op.and]: conditions },
+            attributes: [
+                'id',
+                'nombre',
+                'activo',
+                [Sequelize.literal('(SELECT COUNT(*) FROM campanas cc WHERE cc.id_categoria = "categorias"."id")'), 'total_campanas'],
+            ],
+            include: [{ model: md.empresas, as: 'empresa', attributes: ['id', 'nombre', 'id_usuario'], required: true }],
+            limit: 10,
+            order: [['activo', 'DESC'], ['id', 'DESC']],
+        });
+        const owners = new Map();
+        if (seesAll) {
+            const ownerIds = [...new Set(categorias.map((c) => c.empresa?.id_usuario).filter(Boolean))];
+            if (ownerIds.length > 0) {
+                const users = await md.usuarios.findAll({ where: { id: ownerIds }, attributes: ['id', 'nombre'] });
+                users.forEach((u) => owners.set(u.id, u.nombre));
+            }
+        }
+        return res.json({
+            results: categorias.map((c) => ({
+                id: c.id,
+                nombre: c.nombre,
+                activo: c.activo,
+                ...(seesAll && { responsable: owners.get(c.empresa?.id_usuario) ?? null }),
+                total_campanas: Number(c.get('total_campanas')),
+                empresa: c.empresa?.nombre,
+                url: `/admin/${c.empresa?.id}/${c.id}/campaigns`,
+            })),
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error en búsqueda' });
+    }
+};
+
 const formatDate = (date) => {
     const d = new Date(date);
     return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 }
 
 
+/**
+ * Búsqueda de CAMPAÑAS (3er nivel). El texto se compara con el nombre de la campaña, de su categoría o de su
+ * empresa, así "Coca" encuentra todas las campañas de esa empresa. Cada resultado lleva a la lista de reportes de
+ * la campaña. La visibilidad es la misma que la de los reportes: admin/superadmin ven todas; el resto, las de sus
+ * empresas o aquellas donde tiene algún reporte asignado. El año filtra campañas que tengan algún reporte ese año.
+ */
+
+// Condición SQL (texto) de campañas visibles para un usuario no admin; null para admin/superadmin.
+const buildCampaignVisibility = (user) => {
+    if (isUnrestricted(user)) return null;
+    const userId = Number(user.id);
+    return {
+        [Op.or]: [
+            { '$categoria.empresa.id_usuario$': userId },
+            Sequelize.literal(`EXISTS (SELECT 1 FROM reportes rv WHERE rv.id_campana = "campanas"."id" AND rv.id_usuario = ${userId})`),
+        ],
+    };
+};
+
+const buildCampaignTextCondition = (q) => ({
+    [Op.or]: [
+        buildNameCondition(q, 'campanas.nombre'),
+        buildNameCondition(q, 'categoria.nombre'),
+        buildNameCondition(q, 'categoria->empresa.nombre'),
+    ],
+});
+
+// El año va como número dentro del SQL (parseInt + rango evitan cualquier texto raro).
+const buildCampaignYearCondition = (year) => {
+    const y = Number.parseInt(year, 10);
+    if (!Number.isInteger(y) || y < 2000 || y > 2100) return null;
+    return Sequelize.literal(
+        `EXISTS (SELECT 1 FROM reportes ry WHERE ry.id_campana = "campanas"."id" AND (EXTRACT(YEAR FROM ry.fecha_ini) = ${y} OR EXTRACT(YEAR FROM ry.fecha_fin) = ${y}))`
+    );
+};
+
+const campaignSearch = async (req, res) => {
+    try {
+        const { q, year, category_id } = req.query;
+
+        const hasQuery = q && q.length >= 2;
+        if (!hasQuery && !year && !category_id) {
+            return res.json({ results: [] });
+        }
+
+        const andConditions = [];
+        if (hasQuery) andConditions.push(buildCampaignTextCondition(q));
+        if (year) {
+            const yearCondition = buildCampaignYearCondition(year);
+            if (yearCondition) andConditions.push(yearCondition);
+        }
+        if (category_id) andConditions.push({ id_categoria: category_id });
+
+        const seesAll = isUnrestricted(req.user);
+        const visibility = buildCampaignVisibility(req.user);
+        if (visibility) andConditions.push(visibility);
+
+        const campanas = await md.campanas.findAll({
+            where: andConditions.length ? { [Op.and]: andConditions } : undefined,
+            attributes: [
+                'id',
+                'nombre',
+                'activo',
+                [Sequelize.literal('(SELECT COUNT(*) FROM reportes rc WHERE rc.id_campana = "campanas"."id")'), 'total_reportes'],
+            ],
+            limit: hasQuery ? 10 : 20,
+            include: [
+                {
+                    model: md.categorias,
+                    as: 'categoria',
+                    attributes: ['id', 'nombre'],
+                    required: true,
+                    include: [{ model: md.empresas, as: 'empresa', attributes: ['id', 'nombre', 'id_usuario'], required: true }],
+                },
+            ],
+            order: [
+                ['activo', 'DESC'],   // activas primero
+                ['id', 'DESC'],       // más recientes primero
+            ],
+        });
+
+        // Solo para admin/superadmin: responsable de la empresa de cada campaña.
+        const ownerOf = (c) => c.categoria?.empresa?.id_usuario;
+        const owners = new Map();
+        if (seesAll) {
+            const ownerIds = [...new Set(campanas.map(ownerOf).filter(Boolean))];
+            if (ownerIds.length > 0) {
+                const users = await md.usuarios.findAll({ where: { id: ownerIds }, attributes: ['id', 'nombre'] });
+                users.forEach((u) => owners.set(u.id, u.nombre));
+            }
+        }
+
+        return res.json({
+            results: campanas.map((c) => ({
+                id: c.id,
+                nombre: c.nombre,
+                activo: c.activo,
+                ...(seesAll && { responsable: owners.get(ownerOf(c)) ?? null }),
+                total_reportes: Number(c.get('total_reportes')),
+                empresa: c.categoria?.empresa?.nombre,
+                categoria: c.categoria?.nombre,
+                // Lista de reportes de la campaña
+                url: `/admin/${c.categoria?.empresa?.id}/${c.categoria?.id}/${c.id}/reports`,
+            })),
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error en búsqueda' });
+    }
+};
+
+/**
+ * Filtros (años y categorías) para la búsqueda de campañas, acotados a lo que coincide con el texto y a lo que
+ * el usuario puede ver. Los años salen de los reportes de esas campañas.
+ */
+const campaignSearchFilters = async (req, res) => {
+    try {
+        const { q, year } = req.query;
+        const hasQuery = q && q.length >= 2;
+
+        const base = [];
+        if (hasQuery) base.push(buildCampaignTextCondition(q));
+        const visibility = buildCampaignVisibility(req.user);
+        if (visibility) base.push(visibility);
+
+        const campanas = await md.campanas.findAll({
+            where: base.length ? { [Op.and]: base } : undefined,
+            attributes: ['id'],
+            include: [
+                {
+                    model: md.categorias,
+                    as: 'categoria',
+                    attributes: ['id'],
+                    required: true,
+                    include: [{ model: md.empresas, as: 'empresa', attributes: ['id', 'id_usuario'], required: true }],
+                },
+                { model: md.reportes, as: 'reportes', attributes: ['fecha_ini', 'fecha_fin'], required: false },
+            ],
+        });
+
+        const yearsSet = new Set();
+        campanas.forEach((c) => (c.reportes ?? []).forEach((r) => {
+            if (r.fecha_ini) yearsSet.add(new Date(r.fecha_ini).getFullYear());
+            if (r.fecha_fin) yearsSet.add(new Date(r.fecha_fin).getFullYear());
+        }));
+
+        return res.json({ years: Array.from(yearsSet).sort((a, b) => b - a) });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al obtener filtros de búsqueda' });
+    }
+};
+
 module.exports = {
     campaignSearch,
     campaignSearchFilters,
+    reportSearch,
+    reportSearchFilters,
+    categorySearch,
     companySearch
 };

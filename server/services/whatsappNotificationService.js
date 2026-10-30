@@ -1,6 +1,7 @@
 const { sendTemplateMessage } = require('./whatsappService');
 const { getTelefonosByProceso } = require('./whatsappDestinatariosService');
 const { TEMPLATES } = require('../config/whatsapp_templates');
+const { logEvent } = require('./systemEventService');
 
 // Meta rechaza variables con saltos de línea, tabulaciones o más de 4 espacios seguidos, y limita el largo.
 const cleanParam = (value) => String(value ?? '')
@@ -72,6 +73,12 @@ const notifyProceso = async (proceso, data = {}) => {
 
     if (summary.errores.length > 0) {
         console.error(`[WhatsApp] Aviso "${proceso}" con errores:`, summary.errores);
+        logEvent({
+            category: 'whatsapp',
+            source: proceso,
+            message: `Aviso "${proceso}": ${summary.fallidos} fallido(s), ${summary.enviados} enviado(s)`,
+            detail: { errores: summary.errores },
+        });
     }
     return summary;
 };
@@ -115,7 +122,15 @@ const notifyUsuarios = async (templateKey, recipients = []) => {
             summary.errores.push(`${withPhone[i].nombre}: ${result.reason.message}`);
         }
     });
-    if (summary.errores.length > 0) console.error(`[WhatsApp] Aviso "${templateKey}" con errores:`, summary.errores);
+    if (summary.errores.length > 0) {
+        console.error(`[WhatsApp] Aviso "${templateKey}" con errores:`, summary.errores);
+        logEvent({
+            category: 'whatsapp',
+            source: templateKey,
+            message: `Aviso "${templateKey}": ${summary.fallidos} fallido(s), ${summary.enviados} enviado(s)`,
+            detail: { errores: summary.errores },
+        });
+    }
     return summary;
 };
 

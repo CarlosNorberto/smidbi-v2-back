@@ -80,6 +80,9 @@ app.use((req, res, next) => {
     next();
 });
 
+// Registra en system_events las respuestas 5xx de cualquier endpoint (Configuraciones > Registro de errores).
+app.use(require('./server/services/systemEventService').requestErrorLogger);
+
 // ROUTES
 require('./server/routes')(app);
 require('./server/routes/campaign_manager')(app);

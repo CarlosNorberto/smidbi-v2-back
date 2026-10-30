@@ -159,7 +159,7 @@ const notifyWhatsapp = async (req, res) => {
         }
         const results = await notifyContractsWhatsapp(templateName, languageCode, components);
         if (results.length === 0) {
-            return res.status(404).json({ message: 'No hay numeros configurados para notificaciones de WhatsApp de contratos' });
+            return res.status(404).json({ message: 'No hay números suscritos al aviso "Nuevo contrato generado" en Notificaciones WhatsApp' });
         }
         res.status(200).json({ results });
     } catch (error) {

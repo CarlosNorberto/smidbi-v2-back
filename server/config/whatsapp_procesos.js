@@ -18,6 +18,11 @@ const PROCESOS = [
         label: 'Nuevo reporte creado',
         description: 'Cuando un usuario crea un reporte nuevo en una campaña.',
     },
+    {
+        key: 'nuevo_contrato',
+        label: 'Nuevo contrato generado',
+        description: 'Cuando se genera un contrato y el sistema avisa por WhatsApp.',
+    },
 ];
 
 const PROCESOS_KEYS = PROCESOS.map((p) => p.key);

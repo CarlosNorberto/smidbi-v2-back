@@ -1,19 +1,17 @@
-const { getOpenAIClient } = require('./openai.service');
+const { getAI } = require('../providers');
 
 const generateResponse = async (question, data, fromSelection = false) => {
-    const openai = await getOpenAIClient();
+    const ai = await getAI();
 
     const isOutOfScope = Object.values(data).some(d => d?.out_of_scope === true);
 
     if (isOutOfScope) {
-        // Llamada barata con gpt-4o-mini solo para redactar el mensaje
-        const response = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            response_format: { type: 'json_object' },
-            messages: [
-                {
-                    role: 'system',
-                    content: `Eres un asistente interno de una agencia de marketing digital.
+        // Llamada barata (nivel 'fast') solo para redactar el mensaje
+        const text = await ai.complete({
+            tier: 'fast',
+            json: true,
+            maxTokens: 200,
+            system: `Eres un asistente interno de una agencia de marketing digital.
                         El usuario hizo una pregunta que está fuera del alcance del sistema.
                         El sistema SOLO puede responder sobre estos temas:
                         - Campañas y reportes
@@ -21,17 +19,11 @@ const generateResponse = async (question, data, fromSelection = false) => {
                         - KPIs y métricas
                         - Presupuestos
                         Redacta un mensaje amigable informando esto y lista los temas disponibles.
-                        Responde en formato JSON SOLO con: { "message": "..." }`
-                },
-                {
-                    role: 'user',
-                    content: `Pregunta fuera de scope: "${question}"`
-                }
-            ],
-            max_tokens: 200
+                        Responde en formato JSON SOLO con: { "message": "..." }`,
+            user: `Pregunta fuera de scope: "${question}"`,
         });
 
-        const parsed = JSON.parse(response.choices[0].message.content);
+        const parsed = JSON.parse(text);
         return parsed.message;
     }
 
@@ -39,12 +31,10 @@ const generateResponse = async (question, data, fromSelection = false) => {
     const linkToReport = flatData?.link_to_report || null;
 
     // Flujo normal si no es out_of_scope
-    const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-            {
-                role: 'system',
-                content: `Eres un asistente interno de una agencia de marketing digital.
+    let aiResponse = await ai.complete({
+        tier: 'smart',
+        maxTokens: 1000,
+        system: `Eres un asistente interno de una agencia de marketing digital.
                     Responde de forma clara, profesional y concisa en español.
                     Usa los datos proporcionados para responder con precisión.
                     Si algo merece atención o alerta, menciónalo.
@@ -99,18 +89,10 @@ const generateResponse = async (question, data, fromSelection = false) => {
                     }
 
                     No ofrezcas información adicional, solo responde con lo que se te dio y lo que se te preguntó. Si no tienes suficiente información, dilo claramente.
-                    `
-            },
-            {
-                role: 'user',
-                content: `Pregunta: "${question}"
-                    Datos: ${JSON.stringify(flatData, null, 2)}`
-            }
-        ],
-        max_tokens: 1000
+                    `,
+        user: `Pregunta: "${question}"
+                    Datos: ${JSON.stringify(flatData, null, 2)}`,
     });
-
-    let aiResponse = response.choices[0].message.content;
 
     if (linkToReport) {
         aiResponse += `\n\n[Abrir / editar este reporte](${linkToReport})`;

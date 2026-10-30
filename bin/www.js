@@ -17,6 +17,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET 
 });
 
+// Limpieza del registro de errores (system_events): al arrancar y luego una vez al día.
+const { purgeOldEvents } = require('../server/services/systemEventService');
+purgeOldEvents();
+setInterval(purgeOldEvents, 24 * 60 * 60 * 1000).unref();
+const { purgeOldNotifications } = require('../server/services/notificationService');
+purgeOldNotifications();
+setInterval(purgeOldNotifications, 24 * 60 * 60 * 1000).unref();
+
 app.listen(port, () => {
     console.log(`SMIDBI v2 backend is running on port ${port}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
