@@ -1,13 +1,27 @@
 const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const md = require('../models');
+const { Op } = require('sequelize');
+const Sequelize = require('sequelize');
 
 const LoginLocalStrategy = (app) => {
     passport.use(new LocalStrategy({
         usernameField: 'user',
     }, async (user_name, password, done) => {        
         try {
-            const user = await md.usuarios.scope('withRole').findOne({ where: { usuario: user_name }, attributes: ['id', 'email', 'usuario', 'nombre', 'password', 'time_zone'] });
+            // Solo usuarios ACTIVOS: un usuario desactivado no puede entrar y, si quedó otro con el mismo nombre de
+            // usuario (datos anteriores a la validación de unicidad), no tapa al activo ni se compara su contraseña.
+            // Sin distinguir mayúsculas ni espacios al inicio/fin (el teclado del celular suele agregar ambos).
+            const user = await md.usuarios.scope('withRole').findOne({
+                where: {
+                    [Op.and]: [
+                        Sequelize.where(Sequelize.fn('lower', Sequelize.col('usuario')), String(user_name ?? '').trim().toLowerCase()),
+                        { activo: true },
+                    ],
+                },
+                attributes: ['id', 'email', 'usuario', 'nombre', 'password', 'time_zone'],
+                order: [['id', 'DESC']],
+            });
             if (!user) {
                 return done(null, false, { message: 'Acceso denegado' });
             }
@@ -67,8 +81,9 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (id, done) => {
     try {        
-        let user = await md.usuarios.scope('withRole').findByPk(id, { attributes: ['id', 'email', 'nombre', 'time_zone'] });
-        done(null, user);
+        let user = await md.usuarios.scope('withRole').findByPk(id, { attributes: ['id', 'email', 'nombre', 'time_zone', 'activo'] });
+        // Si el usuario se desactivó (o ya no existe) la sesión abierta deja de valer.
+        done(null, user?.activo ? user : false);
     } catch (error) {
         done(error, null);
     }
