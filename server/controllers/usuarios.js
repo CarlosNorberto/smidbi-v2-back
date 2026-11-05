@@ -36,6 +36,25 @@ const getAll = async (req, res) => {
     }
 }
 
+// Roles que se pueden asignar desde la pantalla de usuarios. El rol 'hidden' (de pruebas) solo se ofrece a un
+// superadmin. La pantalla identifica cada rol por su nombre (`rol`), no por su id: los ids cambian entre entornos.
+const getRoles = async (req, res) => {
+    try {
+        let roles = await md.roles.findAll({
+            where: { activo: true },
+            attributes: ['id', 'rol', 'descripcion'],
+            order: [['id', 'ASC']],
+            raw: true,
+        });
+        if (req.user.role?.rol !== 'superadmin') {
+            roles = roles.filter((role) => role.rol !== 'hidden');
+        }
+        res.status(200).json(roles);
+    } catch (error) {
+        res.status(500).json({ message: `Error al obtener los roles: ${error.message}` });
+    }
+}
+
 const saveUpdate = async (req, res) => {
     try {
         let { id, nombre, usuario, email, time_zone, password, activo, role_id, phone } = req.body;
@@ -86,7 +105,9 @@ const saveUpdate = async (req, res) => {
             password = await bcrypt.hash(password, salt);
         }
         if (!role_id) {
-            role_id = 2; // Asignar rol por defecto si no se proporciona
+            // Rol por defecto: 'user', el más restringido. Se busca por nombre porque el id cambia entre entornos.
+            const defaultRole = await md.roles.findOne({ where: { rol: 'user' }, attributes: ['id'], raw: true });
+            role_id = defaultRole ? defaultRole.id : 2;
         }
         // Teléfono (WhatsApp) para los avisos de tareas: se guarda como "+<código país><número>" o vacío.
         if (phone !== undefined) {
@@ -132,6 +153,7 @@ const changePassword = async (req, res) => {
 
 module.exports = {
     getAll,
+    getRoles,
     saveUpdate,
     changePassword,
 };

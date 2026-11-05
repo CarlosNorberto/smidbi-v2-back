@@ -11,12 +11,19 @@ const cleanParam = (value) => String(value ?? '')
     .slice(0, 1024) || '-';
 
 // Arma el arreglo `components` que espera la API de Meta.
+// Cada elemento de `bodyParams` es un texto (variables POSICIONALES de la plantilla: {{1}}, {{2}}…) o un objeto
+// { name, text } (variables CON NOMBRE: {{code}}, {{date}}…). Meta exige enviar el nombre de cada variable
+// (`parameter_name`) cuando la plantilla se registró con nombres, y lo rechaza si se registró con posiciones.
 const buildComponents = ({ bodyParams = [], buttonParam } = {}) => {
     const components = [];
     if (bodyParams.length > 0) {
         components.push({
             type: 'body',
-            parameters: bodyParams.map((text) => ({ type: 'text', text: cleanParam(text) })),
+            parameters: bodyParams.map((param) => (
+                param !== null && typeof param === 'object'
+                    ? { type: 'text', parameter_name: param.name, text: cleanParam(param.text) }
+                    : { type: 'text', text: cleanParam(param) }
+            )),
         });
     }
     if (buttonParam !== undefined && buttonParam !== null) {

@@ -1,39 +1,37 @@
-const { sendTemplateMessage } = require('./whatsappService');
-const { getTelefonosByProceso } = require('./whatsappDestinatariosService');
-const { logEvent } = require('./systemEventService');
-
-// Proceso "Nuevo contrato generado" (config/whatsapp_procesos.js): los números se eligen en
-// Configuraciones > Notificaciones WhatsApp > "Recibe avisos de".
-const CONTRACTS_PROCESO = 'nuevo_contrato';
+const md = require('../models');
+const { notifyProceso } = require('./whatsappNotificationService');
+const { generateContractCode, getFechaActualLaPaz } = require('../helps');
 
 /**
- * Envía una plantilla de WhatsApp a todos los números activos suscritos al proceso de contratos.
- * Si un número falla, no interrumpe el envío al resto.
- * @param {string} templateName - Nombre de la plantilla aprobada (ej: 'hello_world')
- * @param {string} languageCode - Código de idioma de la plantilla (ej: 'en_US')
- * @param {Array} components - Parámetros dinámicos de la plantilla (opcional)
- * @returns {Promise<Array<{ to: string, status: 'fulfilled'|'rejected', data?: any, error?: string }>>}
+ * Avisa por WhatsApp ("generated_contract") que se generó un contrato nuevo, a los números suscritos al proceso
+ * "Nuevo contrato generado" (Configuraciones > Notificaciones WhatsApp > "Recibe avisos de").
+ *
+ * Es invisible para quien crea el contrato:
+ *  - si ningún número está suscrito, no envía nada (notifyProceso no escribe en el log en ese caso);
+ *  - nunca lanza error: cualquier fallo (WhatsApp caído, plantilla mal configurada...) queda en el registro de
+ *    errores (categoría "whatsapp") y el contrato se guarda igual.
+ *
+ * Se llama SIN await desde la creación del contrato, ya con la transacción confirmada.
+ *
+ * @param {number} contractId - id del contrato recién creado
  */
-const notifyContractsWhatsapp = async (templateName, languageCode = 'en_US', components = []) => {
-    const numbers = await getTelefonosByProceso(CONTRACTS_PROCESO);
-    if (numbers.length === 0) {
-        console.warn('No hay números suscritos al proceso "nuevo_contrato" en Notificaciones WhatsApp');
-        return [];
+const notifyContractCreated = async (contractId) => {
+    try {
+        const contract = await md.contracts.findByPk(contractId, {
+            attributes: ['id', 'application_date', 'create_date'],
+            raw: true,
+        });
+        if (!contract) return;
+
+        await notifyProceso('nuevo_contrato', {
+            contractId: contract.id,
+            code: generateContractCode(contract.application_date || contract.create_date, contract.id),
+            // application_date es una columna `date`: llega como AAAA-MM-DD
+            date: contract.application_date ? String(contract.application_date).slice(0, 10) : getFechaActualLaPaz(),
+        });
+    } catch (error) {
+        console.error('[WhatsApp] No se pudo enviar el aviso de contrato generado:', error.message);
     }
-
-    const results = await Promise.allSettled(
-        numbers.map((to) => sendTemplateMessage(to, templateName, languageCode, components)),
-    );
-
-    return results.map((result, index) => {
-        const to = numbers[index];
-        if (result.status === 'fulfilled') {
-            return { to, status: 'fulfilled', data: result.value };
-        }
-        console.error(`Error notificando por WhatsApp a ${to}:`, result.reason.message);
-        logEvent({ category: 'whatsapp', source: CONTRACTS_PROCESO, message: `No se pudo avisar a ${to}: ${result.reason.message}`, detail: { plantilla: templateName } });
-        return { to, status: 'rejected', error: result.reason.message };
-    });
 };
 
-module.exports = { notifyContractsWhatsapp };
+module.exports = { notifyContractCreated };

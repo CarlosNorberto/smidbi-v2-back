@@ -1,7 +1,10 @@
-const { getYear, parseISO } = require('date-fns');
 const md = require('../../models');
 const { generateContractCode } = require('../../helps');
-const { notifyContractsWhatsapp } = require('../../services/contractNotificationService');
+const { deleteContract } = require('../../services/contractService');
+
+// Código del contrato (ADM-CTR-<año>-<id>). Los contratos antiguos sin fecha de solicitud usan la de creación para el
+// año; antes salían como "ADM-CTR-null-204".
+const contractCode = (contract) => generateContractCode(contract.application_date || contract.create_date, contract.id);
 
 const getAll = async (req, res) => {
     try {
@@ -21,15 +24,14 @@ const getAll = async (req, res) => {
             limit: parseInt(limit),
             offset: parseInt(offset),
             order: [['create_date', 'DESC']]
-        });        
+        });
         contracts.rows = contracts.rows.map(contract => {
-            const code = generateContractCode(contract.application_date, contract.id);            
+            const code = contractCode(contract);
             return {
                 ...contract.toJSON(),
                 code,
             };
         });
-        console.log(contracts.count, contracts.rows.length);
         res.status(200).json(contracts);
     } catch (error) {
         res.status(500).json({ message: `Error al obtener los contratos: ${error.message}` });
@@ -50,7 +52,7 @@ const getById = async (req, res) => {
         if (!contract) {
             return res.status(404).json({ message: "No se encuentra el contrato con el ID especificado." });
         }
-        const code = generateContractCode(contract.application_date, contract.id);
+        const code = contractCode(contract);
         res.status(200).json({
             ...contract.toJSON(),
             code,
@@ -60,76 +62,35 @@ const getById = async (req, res) => {
     }
 }
 
-const changeApplicationStatus = async (req, res) => {
+// Id de la URL -> número, o null si es '0' / 'null' (desasignar). Devuelve undefined si no es un id válido.
+const parseNullableId = (value) => {
+    if (value === '0' || value === 'null' || value === null) return null;
+    return /^\d+$/.test(String(value)) ? Number(value) : undefined;
+};
+
+// Cambia UN campo de asignación del contrato (estado, solicitante, soporte, responsable). Espera el guardado antes
+// de responder (antes se respondía 200 sin esperarlo, así que un fallo no llegaba nunca al usuario).
+const updateContractField = (field, paramName) => async (req, res) => {
     try {
-        let { contractId, applicationStatusId } = req.params;
-        const contract = await md.contracts.findByPk(contractId);
+        const contract = await md.contracts.findByPk(req.params.contractId);
         if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato el ID especificado." });
+            return res.status(404).json({ message: "No se encuentra el contrato con el ID especificado." });
         }
-        applicationStatusId = applicationStatusId !== '0' && applicationStatusId !== 'null' ? applicationStatusId : null
-        contract.update({
-            application_status_id: applicationStatusId
-        });
+        const value = parseNullableId(req.params[paramName]);
+        if (value === undefined) {
+            return res.status(400).json({ message: 'El valor enviado no es válido.' });
+        }
+        await contract.update({ [field]: value, write_date: new Date() });
         res.status(200).json(contract);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
-}
+};
 
-const changeApplicant = async (req, res) => {
-    try {
-        let { contractId, applicantId } = req.params;
-        const contract = await md.contracts.findByPk(contractId);
-        if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato el ID especificado." });
-        }
-        applicantId = applicantId !== '0' && applicantId !== 'null' ? applicantId : null
-        contract.update({
-            applicant_id: applicantId
-        });
-        res.status(200).json(contract);
-    }
-    catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
-
-const changeClientSupport = async (req, res) => {
-    try {
-        let { contractId, clientSupportId } = req.params;
-        const contract = await md.contracts.findByPk(contractId);
-        if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato el ID especificado." });
-        }
-        clientSupportId = clientSupportId !== '0' && clientSupportId !== 'null' ? clientSupportId : null
-        contract.update({
-            client_support_id: clientSupportId
-        });
-        res.status(200).json(contract);
-    }
-    catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
-
-const changeResponsible = async (req, res) => {
-    try {
-        let { contractId, responsibleId } = req.params;
-        const contract = await md.contracts.findByPk(contractId);
-        if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato el ID especificado." });
-        }
-        responsibleId = responsibleId !== '0' && responsibleId !== 'null' ? responsibleId : null
-        contract.update({
-            responsible_id: responsibleId
-        });
-        res.status(200).json(contract);
-    }
-    catch (error) {
-        res.status(500).json({ message: error.message });
-    }
-}
+const changeApplicationStatus = updateContractField('application_status_id', 'applicationStatusId');
+const changeApplicant = updateContractField('applicant_id', 'applicantId');
+const changeClientSupport = updateContractField('client_support_id', 'clientSupportId');
+const changeResponsible = updateContractField('responsible_id', 'responsibleId');
 
 const changeObservations = async (req, res) => {
     try {
@@ -137,12 +98,10 @@ const changeObservations = async (req, res) => {
         let { observations } = req.body;
         const contract = await md.contracts.findByPk(contractId);
         if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato el ID especificado." });
+            return res.status(404).json({ message: "No se encuentra el contrato con el ID especificado." });
         }
-        observations = observations !== 'null' ? observations : null;
-        contract.update({
-            observations: observations
-        });
+        observations = observations && observations !== 'null' ? observations : null;
+        await contract.update({ observations, write_date: new Date() });
         res.status(200).json(contract);
     }
     catch (error) {
@@ -151,23 +110,24 @@ const changeObservations = async (req, res) => {
     }
 }
 
-const notifyWhatsapp = async (req, res) => {
+// Elimina el contrato completo (contratos firmados, archivos y formulario de la empresa). Solo admin y superadmin
+// (ver la ruta). Es irreversible.
+const remove = async (req, res) => {
     try {
-        const { templateName, languageCode, components } = req.body;
-        if (!templateName) {
-            return res.status(400).json({ message: 'templateName es requerido' });
+        const result = await deleteContract(req.params.id);
+        if (!result) {
+            return res.status(404).json({ message: 'No se encuentra el contrato con el ID especificado.' });
         }
-        const results = await notifyContractsWhatsapp(templateName, languageCode, components);
-        if (results.length === 0) {
-            return res.status(404).json({ message: 'No hay números suscritos al aviso "Nuevo contrato generado" en Notificaciones WhatsApp' });
-        }
-        res.status(200).json({ results });
+        const warning = result.filesFailed > 0
+            ? ` No se pudieron borrar ${result.filesFailed} archivo(s) firmados del almacenamiento; quedó registrado en el registro de errores.`
+            : '';
+        res.status(200).json({ message: `Contrato eliminado correctamente.${warning}`, ...result });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        res.status(500).json({ message: `Error al eliminar el contrato: ${error.message}` });
     }
 }
 
-    module.exports = {
+module.exports = {
     getAll,
     getById,
     changeApplicationStatus,
@@ -175,5 +135,5 @@ const notifyWhatsapp = async (req, res) => {
     changeClientSupport,
     changeResponsible,
     changeObservations,
-    notifyWhatsapp,
+    remove,
 }

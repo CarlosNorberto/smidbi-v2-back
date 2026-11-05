@@ -5,8 +5,11 @@ module.exports = (sequelize, DataTypes) => {
             primaryKey: true,
             autoIncrement: true,
         },
+        // Las tres fechas son columnas `date` (sin hora): DATEONLY. Con DATE, una fecha escrita como '2026-11-01' se
+        // interpretaba como medianoche UTC y, con la zona horaria de Bolivia (-04:00) configurada en Sequelize, se
+        // guardaba el día anterior ('2026-10-31').
         application_date: {
-            type: DataTypes.DATE,
+            type: DataTypes.DATEONLY,
             allowNull: true,
         },
         applicant_id: {
@@ -43,11 +46,11 @@ module.exports = (sequelize, DataTypes) => {
             allowNull: true,
         },
         start_date: {
-            type: DataTypes.DATE,
+            type: DataTypes.DATEONLY,
             allowNull: true,
         },
         end_date: {
-            type: DataTypes.DATE,
+            type: DataTypes.DATEONLY,
             allowNull: true,
         },
         observations: {

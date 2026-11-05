@@ -26,11 +26,18 @@ const uploadSignedContract = async (req, res) => {
         }
 
         const { contractId } = req.params;
+        // Sin esta revisión se subía el archivo a Cloudinary aunque el contrato no existiera.
+        const contractExists = await md.contracts.count({ where: { id: contractId } });
+        if (!contractExists) {
+            return res.status(404).json({ message: 'No se encuentra el contrato con el ID especificado.' });
+        }
         const extension = path.extname(req.file.originalname);
 
         const b64 = Buffer.from(req.file.buffer).toString('base64');
         const dataURI = `data:${req.file.mimetype};base64,${b64}`;
-        const uploadResult = await cloudinary.uploader.upload(dataURI, { folder: 'SMID/SIGNED CONTRACTS', resource_type: 'raw', format: extension.replace('.', '') });
+        // Se asigna a la variable de afuera (antes era un `const` nuevo que la ocultaba), para que el catch
+        // pueda borrar el archivo si falla el guardado en la base.
+        uploadResult = await cloudinary.uploader.upload(dataURI, { folder: 'SMID/SIGNED CONTRACTS', resource_type: 'raw', format: extension.replace('.', '') });
 
         const signedContract = await md.signed_contracts.create({
             contract_id: contractId,
@@ -59,11 +66,13 @@ const removeSignedContract = async (req, res) => {
         const { contractId } = req.params;
         const contract = await md.signed_contracts.findByPk(contractId);
         if (!contract) {
-            return res.status(401).json({ message: "No se encuentra el contrato firmado con el ID especificado." });
+            return res.status(404).json({ message: "No se encuentra el contrato firmado con el ID especificado." });
         }
-        await cloudinary.uploader.destroy(contract.public_id, { resource_type: 'raw' });
+        if (contract.public_id) {
+            await cloudinary.uploader.destroy(contract.public_id, { resource_type: 'raw' });
+        }
         await contract.destroy();
-        res.status(200).json({ message: "Contrato eliminado con exito" });
+        res.status(200).json({ message: "Contrato firmado eliminado con éxito" });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

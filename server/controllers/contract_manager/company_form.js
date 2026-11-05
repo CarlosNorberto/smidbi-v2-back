@@ -1,11 +1,40 @@
 const md = require('../../models');
 const { generateContractCode, parseToDate } = require('../../helps');
-const { sequelize } = require('../../models');
 const { toZonedTime } = require('date-fns-tz');
 const { google } = require('googleapis');
 const { GoogleAuth } = require('google-auth-library');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
+const { deleteContract } = require('../../services/contractService');
+const { notifyContractCreated } = require('../../services/contractNotificationService');
+
+// Tipo de servicio del formulario -> sufijo de sus campos (start_date_<sufijo>, duration_<sufijo>...).
+// En el formulario "Servicio de Consultoría" (consulting) se divide en Analítica, SEO o Personalizada, y cada una
+// guarda sus propios datos. Si un registro quedó con varios marcados (al cambiar de tipo en el formulario quedan
+// valores viejos), manda el primero en este orden.
+const serviceSuffix = (data) => {
+    if (data.packs_pauta) return 'packs_pauta';
+    if (data.traffickers) return 'traffickers';
+    if (data.consulting) {
+        if (data.analitica) return 'analitica';
+        if (data.seo) return 'seo';
+        return 'consulting';
+    }
+    return null; // adenda u otro: no tiene fechas de servicio
+};
+
+// Fechas de inicio y fin del servicio, las que se copian al contrato.
+const serviceDates = (data) => {
+    const suffix = serviceSuffix(data);
+    if (!suffix) return { start: null, end: null };
+    return { start: parseToDate(data[`start_date_${suffix}`]), end: parseToDate(data[`end_date_${suffix}`]) };
+};
+
+// El id y el contrato los fija el servidor: nunca se toman del cuerpo de la petición.
+const cleanBody = (body) => {
+    const { id, contract_id, ...rest } = body || {};
+    return rest;
+};
 
 const getById = async (req, res) => {
     try {
@@ -20,21 +49,30 @@ const getById = async (req, res) => {
     }
 }
 
+// Crea el formulario de la empresa Y su contrato. Van en una transacción: antes, si fallaba la creación del contrato
+// quedaba un formulario suelto (hay 46 así en la base). Responde con el formulario y el id del contrato creado.
 const create = async (req, res) => {
     try {
-        const body = req.body;                
-        const newCompanyForm = await md.company_form.create(body);
+        const body = cleanBody(req.body);
+        if (!body.company_name || !String(body.company_name).trim()) {
+            return res.status(400).json({ message: 'El nombre de la empresa es obligatorio.' });
+        }
         const nowLaPaz = toZonedTime(new Date(), 'America/La_Paz');
-        const startDate = parseToDate(newCompanyForm.start_date_packs_pauta || newCompanyForm.start_date_traffickers || newCompanyForm.start_date_consulting || newCompanyForm.start_date_analitica || newCompanyForm.start_date_seo);
-        const endDate = parseToDate(newCompanyForm.end_date_packs_pauta || newCompanyForm.end_date_traffickers || newCompanyForm.end_date_consulting || newCompanyForm.end_date_analitica || newCompanyForm.end_date_seo);
-        await md.contracts.create({
-            company_form_id: newCompanyForm.id,            
-            application_date: nowLaPaz,
-            start_date: startDate,
-            end_date: endDate,
-            code: generateContractCode(nowLaPaz, newCompanyForm.id),
+        const { companyForm, contract } = await md.sequelize.transaction(async (transaction) => {
+            const companyForm = await md.company_form.create(body, { transaction });
+            const { start, end } = serviceDates(companyForm);
+            const contract = await md.contracts.create({
+                company_form_id: companyForm.id,
+                application_date: nowLaPaz,
+                start_date: start,
+                end_date: end,
+            }, { transaction });
+            return { companyForm, contract };
         });
-        res.status(201).json(newCompanyForm);
+        // Aviso por WhatsApp a los números suscritos a "Nuevo contrato generado". Sin await y ya con la transacción
+        // confirmada: nunca lanza error ni demora la respuesta (ver services/contractNotificationService.js).
+        notifyContractCreated(contract.id);
+        res.status(201).json({ ...companyForm.toJSON(), contract_id: contract.id });
     } catch (error) {
         res.status(500).json({ message: `Error al crear el formulario de la empresa: ${error.message}` });
     }
@@ -43,18 +81,27 @@ const create = async (req, res) => {
 const update = async (req, res) => {
     try {
         const { id } = req.params;
-        const body = req.body;
-        const updatedCompanyForm = await md.company_form.update(body, { where: { id: id } });
-        await md.contracts.update({
-            start_date: parseToDate(body.start_date_packs_pauta || body.start_date_traffickers || body.start_date_consulting || body.start_date_analitica || body.start_date_seo),
-            end_date: parseToDate(body.end_date_packs_pauta || body.end_date_traffickers || body.end_date_consulting || body.end_date_analitica || body.end_date_seo),
-        }, { where: { company_form_id: id } });
-        res.status(200).json(updatedCompanyForm);
+        const body = cleanBody(req.body);
+        const companyForm = await md.company_form.findByPk(id);
+        if (!companyForm) {
+            return res.status(404).json({ message: 'Formulario de empresa no encontrado' });
+        }
+        await md.sequelize.transaction(async (transaction) => {
+            await companyForm.update(body, { transaction });
+            const { start, end } = serviceDates(companyForm);
+            await md.contracts.update(
+                { start_date: start, end_date: end, write_date: new Date() },
+                { where: { company_form_id: companyForm.id }, transaction }
+            );
+        });
+        res.status(200).json(companyForm);
     } catch (error) {
         res.status(500).json({ message: `Error al actualizar el formulario de la empresa: ${error.message}` });
     }
 }
 
+// Elimina el formulario junto con su contrato y los contratos firmados (ver services/contractService.js). Si el
+// formulario no tiene contrato (los hay por datos anteriores), solo se borra el formulario.
 const remove = async (req, res) => {
     try {
         const { id } = req.params;
@@ -62,7 +109,12 @@ const remove = async (req, res) => {
         if (!companyForm) {
             return res.status(404).json({ message: 'Formulario de empresa no encontrado' });
         }
-        await companyForm.destroy();
+        const contracts = await md.contracts.findAll({ where: { company_form_id: id }, attributes: ['id'], raw: true });
+        for (const contract of contracts) {
+            await deleteContract(contract.id);
+        }
+        // Si el formulario aún existe (no tenía contrato), se borra aquí.
+        await md.company_form.destroy({ where: { id } });
         res.status(200).json({ message: 'Formulario de empresa eliminado correctamente' });
     } catch (error) {
         res.status(500).json({ message: `Error al eliminar el formulario de la empresa: ${error.message}` });
@@ -81,17 +133,17 @@ const generateContract = async (companyForm) => {
     const TEMPLATE_TRAFFICKERS_ID = '1UdSpuD2QQ0wmTb4IkCSUp_Lq0izWp5jfEDgOutdO5xk';
     const TEMPLATE_SEO_ID = '141ZVPmz5Cn7BiD6ranFLWJ1C27SyRnscDVQ6g-WhxOI';
 
-    const templateName = companyForm.packs_pauta ? 'PACKS_PAUTA' : companyForm.traffickers ? 'TRAFFICKERS' : companyForm.consulting ? 'SEO' : null;
-
-    let templateId = '';
-    if(templateName.toString().toUpperCase() === 'PACKS_PAUTA'){
-        templateId = TEMPLATE_PACKS_PAUTA_ID;
-    }else if(templateName.toString().toUpperCase() === 'TRAFFICKERS'){
-        templateId = TEMPLATE_TRAFFICKERS_ID;
-    }else if(templateName.toString().toUpperCase() === 'SEO'){
-        templateId = TEMPLATE_SEO_ID;
-    }else{
-        throw new Error('Nombre de plantilla (template_name) no válido');
+    // Solo hay plantillas de Word para Packs de Pauta, Traffickers y Consultoría (que usa la de SEO para sus tres
+    // tipos: Analítica, SEO y Personalizada). Una Adenda no tiene plantilla: se avisa con un mensaje claro.
+    const suffix = serviceSuffix(companyForm);
+    const templateId = suffix === 'packs_pauta' ? TEMPLATE_PACKS_PAUTA_ID
+        : suffix === 'traffickers' ? TEMPLATE_TRAFFICKERS_ID
+        : suffix ? TEMPLATE_SEO_ID
+        : null;
+    if (!templateId) {
+        const error = new Error('Este tipo de servicio (Adenda) no tiene una plantilla de contrato para generar.');
+        error.status = 400;
+        throw error;
     }
 
     const response = await drive.files.export({
@@ -116,7 +168,7 @@ const generateContract = async (companyForm) => {
         where: {
             company_form_id: companyForm.id
         },
-        attributes: ['id', 'application_date']
+        attributes: ['id', 'application_date', 'create_date']
     });
     // extraer el año de la fecha de aplicación
     if (!contract) {
@@ -124,10 +176,12 @@ const generateContract = async (companyForm) => {
     }    
 
     // 3. Reemplazar las variables (sin {{}} en las claves)    
+    // Alcance, duración y fechas son los del tipo de servicio del contrato (antes la duración y las fechas salían
+    // siempre de "Packs de Pauta": en los demás servicios el documento decía "duración de null ... a partir del null").
     const dato_to_replace = {
-        ALCANCE: companyForm.packs_pauta ? companyForm.scope_of_service_packs_pauta : companyForm.traffickers ? companyForm.scope_of_service_traffickers : companyForm.consulting ? companyForm.scope_of_service_consulting : companyForm.analitica ? companyForm.scope_of_service_analitica : companyForm.seo ? companyForm.scope_of_service_seo : null,
-        DURACION: `El Contrato tendrá una duración de ${companyForm.duration_packs_pauta}, entrará en vigencia a partir del ${companyForm.start_date_packs_pauta} hasta el ${companyForm.end_date_packs_pauta}.`.replace(/\s+/g, ' '),
-        CODIGO: generateContractCode(contract.application_date, contract.id),
+        ALCANCE: companyForm[`scope_of_service_${suffix}`] ?? '',
+        DURACION: `El Contrato tendrá una duración de ${companyForm[`duration_${suffix}`] ?? ''}, entrará en vigencia a partir del ${companyForm[`start_date_${suffix}`] ?? ''} hasta el ${companyForm[`end_date_${suffix}`] ?? ''}.`.replace(/\s+/g, ' '),
+        CODIGO: generateContractCode(contract.application_date || contract.create_date, contract.id),
     }
 
     doc.setData(dato_to_replace);
@@ -149,18 +203,21 @@ const downloadContract = async (req, res) => {
 
         const companyForm = await md.company_form.findByPk(companyFormId);
         if(!companyForm){
-            return res.status(400).json({ error: 'Formulario de empresa no encontrado' });
+            return res.status(404).json({ message: 'Formulario de empresa no encontrado' });
         }
 
         const buffer = await generateContract(companyForm);
 
+        // Nombre de archivo sin espacios ni caracteres raros (van dentro de una cabecera HTTP).
+        const safeName = String(companyForm.company_name || 'empresa').trim().replace(/[^\w.-]+/g, '_');
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-        res.setHeader('Content-Disposition', `attachment; filename=contrato_${companyForm.company_name}.docx`);
+        res.setHeader('Content-Disposition', `attachment; filename=contrato_${safeName}.docx`);
         res.send(Buffer.from(buffer));
 
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: 'Error generando contrato' });
+        // La petición se hace como "blob": el frontend lee `message` de la respuesta si viene en JSON.
+        res.status(error.status || 500).json({ message: error.status ? error.message : 'Error generando contrato' });
     }
 }
 

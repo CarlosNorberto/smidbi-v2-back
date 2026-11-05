@@ -34,6 +34,8 @@ module.exports = (app) => {
     // Empresas para listar usuarios y poder asignarles cosas. Queda abierto
     // a cualquier usuario interno logueado.
     app.get(process.env.PREFIX_API + '/users/all', sessionAuth, usuarios.getAll);
+    // Roles asignables en la pantalla de gestión de usuarios (admin/superadmin).
+    app.get(process.env.PREFIX_API + '/users/roles', sessionAuth, requireRole('admin', 'superadmin'), usuarios.getRoles);
     // /users/save sí es exclusivo de la página de gestión de usuarios (admin/superadmin).
     app.post(process.env.PREFIX_API + '/users/save', sessionAuth, requireRole('admin', 'superadmin'), usuarios.saveUpdate);
     // cambio de la propia contraseña: abierto a cualquier usuario logueado,

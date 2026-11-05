@@ -53,4 +53,23 @@ TEMPLATES.tarea_asignada = {
     }),
 };
 
+// Plantilla "generated_contract" (proceso "Nuevo contrato generado"), registrada en Meta con variables CON NOMBRE:
+//   "Hola, el contrato con código {{code}} fue generado en fecha {{date}} en el gestor de contratos."
+//   code (ej. ABC-123)  = código del contrato (ADM-CTR-<año>-<id>)
+//   date (ej. 2026-10-01) = fecha de solicitud, AAAA-MM-DD
+// + botón con URL dinámica:  https://v2.smidbi.site/admin/contract_manager/{{1}}   ({{1}} = id del contrato)
+// Quien abre el link debe iniciar sesión y tener acceso al Gestor de Contratos; después de entrar, el sistema lo lleva
+// al detalle del contrato. Los nombres de las variables (code, date) deben ser EXACTAMENTE los de la plantilla aprobada.
+TEMPLATES.nuevo_contrato = {
+    name: 'generated_contract',
+    languageCode: LANGUAGE_CODE,
+    build: ({ code, date, contractId }) => ({
+        bodyParams: [
+            { name: 'code', text: code },
+            { name: 'date', text: date },
+        ],
+        buttonParam: String(contractId),
+    }),
+};
+
 module.exports = { TEMPLATES };
