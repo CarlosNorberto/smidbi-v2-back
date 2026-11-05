@@ -7,4 +7,8 @@
 // Gestor de Contratos: ver y administrar contratos (crear, editar, asignar, subir firmados, generar el documento y eliminar).
 const CONTRACT_MANAGER_ROLES = ['admin', 'superadmin', 'contracts'];
 
-module.exports = { CONTRACT_MANAGER_ROLES };
+// CRM / Gestor de Prospectos (`lead_manager`): ver y administrar todo (tratos, seguimientos, prospectos, rubros, etapas y
+// temperaturas). Un `user` normal ya no entra.
+const LEAD_MANAGER_ROLES = ['admin', 'superadmin', 'leads'];
+
+module.exports = { CONTRACT_MANAGER_ROLES, LEAD_MANAGER_ROLES };

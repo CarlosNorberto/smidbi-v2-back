@@ -1,4 +1,5 @@
 const { sessionAuth, requireRole } = require('../../auth/middleware');
+const { LEAD_MANAGER_ROLES } = require('../../auth/roles');
 const etapas = require('../../controllers/lead_manager/stages');
 const deals = require('../../controllers/lead_manager/deals');
 const estados = require('../../controllers/lead_manager/status');
@@ -12,54 +13,57 @@ const customer_temperature = require('../../controllers/lead_manager/customer_te
 
 module.exports=(app)=>{
 
+    // TODO el CRM (leer y escribir, incluidas las etapas y temperaturas) es solo de admin, superadmin y el rol "leads".
+    const access = [sessionAuth, requireRole(...LEAD_MANAGER_ROLES)];
+
     // STAGES (ETAPAS)
-    app.get(process.env.PREFIX_API + '/lead_manager/stages/all', sessionAuth, etapas.getAll);   
-    app.patch(process.env.PREFIX_API + '/lead_manager/stages/reorder', sessionAuth, requireRole('admin', 'superadmin'), etapas.reorder);
-    app.put(process.env.PREFIX_API + '/lead_manager/stages/update/:id', sessionAuth, requireRole('admin', 'superadmin'), etapas.update);
-    app.post(process.env.PREFIX_API + '/lead_manager/stages/create', sessionAuth, requireRole('admin', 'superadmin'), etapas.create);
+    app.get(process.env.PREFIX_API + '/lead_manager/stages/all', ...access, etapas.getAll);   
+    app.patch(process.env.PREFIX_API + '/lead_manager/stages/reorder', ...access, etapas.reorder);
+    app.put(process.env.PREFIX_API + '/lead_manager/stages/update/:id', ...access, etapas.update);
+    app.post(process.env.PREFIX_API + '/lead_manager/stages/create', ...access, etapas.create);
 
     // DEALS (NEGOCIOS)
-    app.get(process.env.PREFIX_API + '/lead_manager/deals/by_stage', sessionAuth, deals.getByStage);     
-    app.patch(process.env.PREFIX_API + '/lead_manager/deals/reorder', sessionAuth, deals.reorder);
+    app.get(process.env.PREFIX_API + '/lead_manager/deals/by_stage', ...access, deals.getByStage);     
+    app.patch(process.env.PREFIX_API + '/lead_manager/deals/reorder', ...access, deals.reorder);
 
     // ESTADOS
-    app.get(process.env.PREFIX_API + '/lead_manager/status/all', sessionAuth, estados.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/status/save_update', sessionAuth, estados.saveUpdate);
+    app.get(process.env.PREFIX_API + '/lead_manager/status/all', ...access, estados.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/status/save_update', ...access, estados.saveUpdate);
 
     // SERVICIOS
-    app.get(process.env.PREFIX_API + '/lead_manager/services/all', sessionAuth, servicios.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/services/save_update', sessionAuth, servicios.saveUpdate);
+    app.get(process.env.PREFIX_API + '/lead_manager/services/all', ...access, servicios.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/services/save_update', ...access, servicios.saveUpdate);
 
     // RESPONSIBLES
-    app.get(process.env.PREFIX_API + '/lead_manager/responsibles/all', sessionAuth, responsibles.getAll);
+    app.get(process.env.PREFIX_API + '/lead_manager/responsibles/all', ...access, responsibles.getAll);
 
     // CUSTOMER TEMPERATURE
-    app.get(process.env.PREFIX_API + '/lead_manager/customer_temperature/all', sessionAuth, customer_temperature.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/customer_temperature/create', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.create);
-    app.put(process.env.PREFIX_API + '/lead_manager/customer_temperature/update/:id', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.update);
-    app.patch(process.env.PREFIX_API + '/lead_manager/customer_temperature/reorder', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.reorder);
-    app.delete(process.env.PREFIX_API + '/lead_manager/customer_temperature/remove/:id', sessionAuth, requireRole('admin', 'superadmin'), customer_temperature.remove);
+    app.get(process.env.PREFIX_API + '/lead_manager/customer_temperature/all', ...access, customer_temperature.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/customer_temperature/create', ...access, customer_temperature.create);
+    app.put(process.env.PREFIX_API + '/lead_manager/customer_temperature/update/:id', ...access, customer_temperature.update);
+    app.patch(process.env.PREFIX_API + '/lead_manager/customer_temperature/reorder', ...access, customer_temperature.reorder);
+    app.delete(process.env.PREFIX_API + '/lead_manager/customer_temperature/remove/:id', ...access, customer_temperature.remove);
 
     // HISTORIAL DE PROSPECTOS
-    app.get(process.env.PREFIX_API + '/lead_manager/prospect_history/one/:id', sessionAuth, prospect_history.getById);
-    app.get(process.env.PREFIX_API + '/lead_manager/prospect_history/all', sessionAuth, prospect_history.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/prospect_history/create', sessionAuth, prospect_history.create);
-    app.put(process.env.PREFIX_API + '/lead_manager/prospect_history/update/:id', sessionAuth, prospect_history.update);
-    app.delete(process.env.PREFIX_API + '/lead_manager/prospect_history/remove/:id', sessionAuth, prospect_history.remove);
+    app.get(process.env.PREFIX_API + '/lead_manager/prospect_history/one/:id', ...access, prospect_history.getById);
+    app.get(process.env.PREFIX_API + '/lead_manager/prospect_history/all', ...access, prospect_history.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/prospect_history/create', ...access, prospect_history.create);
+    app.put(process.env.PREFIX_API + '/lead_manager/prospect_history/update/:id', ...access, prospect_history.update);
+    app.delete(process.env.PREFIX_API + '/lead_manager/prospect_history/remove/:id', ...access, prospect_history.remove);
 
     // HISTORIAL DE GESTIONES (correo, WhatsApp, llamada, reunión) de una oportunidad
-    app.get(process.env.PREFIX_API + '/lead_manager/follow_ups/by_deal/:id', sessionAuth, follow_ups.getByDeal);
-    app.post(process.env.PREFIX_API + '/lead_manager/follow_ups/create', sessionAuth, follow_ups.create);
-    app.put(process.env.PREFIX_API + '/lead_manager/follow_ups/update/:id', sessionAuth, follow_ups.update);
-    app.delete(process.env.PREFIX_API + '/lead_manager/follow_ups/remove/:id', sessionAuth, follow_ups.remove);
+    app.get(process.env.PREFIX_API + '/lead_manager/follow_ups/by_deal/:id', ...access, follow_ups.getByDeal);
+    app.post(process.env.PREFIX_API + '/lead_manager/follow_ups/create', ...access, follow_ups.create);
+    app.put(process.env.PREFIX_API + '/lead_manager/follow_ups/update/:id', ...access, follow_ups.update);
+    app.delete(process.env.PREFIX_API + '/lead_manager/follow_ups/remove/:id', ...access, follow_ups.remove);
 
     // RUBROS / SECTORES de los prospectos
-    app.get(process.env.PREFIX_API + '/lead_manager/industries/all', sessionAuth, industries.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/industries/create', sessionAuth, industries.create);
+    app.get(process.env.PREFIX_API + '/lead_manager/industries/all', ...access, industries.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/industries/create', ...access, industries.create);
 
     // PROSPECTOS
-    app.get(process.env.PREFIX_API + '/lead_manager/prospects/all', sessionAuth, prospectos.getAll);
-    app.post(process.env.PREFIX_API + '/lead_manager/prospects/create', sessionAuth, prospectos.create);
-    app.patch(process.env.PREFIX_API + '/lead_manager/prospects/update/:id', sessionAuth, prospectos.update);
+    app.get(process.env.PREFIX_API + '/lead_manager/prospects/all', ...access, prospectos.getAll);
+    app.post(process.env.PREFIX_API + '/lead_manager/prospects/create', ...access, prospectos.create);
+    app.patch(process.env.PREFIX_API + '/lead_manager/prospects/update/:id', ...access, prospectos.update);
 }
     
