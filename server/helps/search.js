@@ -77,6 +77,11 @@ const buildFilters = (filters, fieldMap) => {
             } else {
                 continue; // rango vacío, salta este filtro
             }
+        } else if (Array.isArray(value)) {
+            // select con varios valores (p. ej. dos temperaturas): cualquiera de ellos
+            const values = value.filter((v) => v != null && v !== '');
+            if (values.length === 0) continue;
+            condition = { [Op.in]: values };
         } else {
             condition = value; // select u otros: igualdad directa
         }
