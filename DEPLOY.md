@@ -7,7 +7,7 @@ Guía rápida para actualizar el sistema nuevo en el servidor de producción.
 | | Cómo se actualiza |
 |---|---|
 | **Backend** (este repo) | Parado en el servidor, corriendo `./deploy.sh` |
-| **Frontend** (`smidbi-vite-front`) | Solo un build estático — se compila local y se sube por FTP/SFTP |
+| **Frontend** (`smidbi-vite-front`) | También lo hace `./deploy.sh`: pull, build y copia a `/var/www/v2` |
 
 ---
 
@@ -30,6 +30,7 @@ Eso hace, en este orden:
 2. `npm ci` — reinstala dependencias exactas según `package-lock.json` (incluye paquetes nuevos que se hayan agregado, como `@react-pdf/renderer`).
 3. `npm run migrate:prod` — corre las migraciones pendientes contra la base de producción.
 4. `pm2 reload smidbi2` — reinicia el proceso sin downtime.
+5. Frontend (ver más abajo): `git pull`, `npm ci`, `npm run build` y copia de `dist/` a `/var/www/v2`.
 
 ### Verificar que salió bien
 
@@ -69,13 +70,21 @@ De ahí en adelante, `deploy.sh` se actualiza solo en cada corrida (ver el comen
 
 ## Frontend
 
-Confirmado: sí, es solo un build. No hay proceso de servidor para el frontend — Apache sirve los archivos estáticos directamente.
+Es un build estático: no hay proceso de servidor, Apache sirve los archivos de `/var/www/v2`. `deploy.sh` lo actualiza después del backend:
 
-1. Local, en `smidbi-vite-front`:
-   ```bash
-   npm run build
-   ```
-   Esto genera `dist/`.
-2. Subir el **contenido** de `dist/` por FTP/SFTP a la carpeta que sirve Apache en el servidor (reemplazando lo que había).
+1. `git pull --ff-only` en `/home/smid-vite-front`.
+2. Carga **Node 20 con nvm solo para este paso** (Vite 6 y Tailwind 4 no andan con el Node 16 del servidor; el backend y pm2 siguen con Node 16). Si nvm no está instalado y el Node es menor a 20, el script se detiene con un mensaje.
+3. `npm ci` y `npm run build` (genera `dist/`, con las variables de `.env.production`).
+4. Solo si el build salió bien, copia `dist/` a `/var/www/v2` con `rsync --delete`, **conservando el `.htaccess`** que hay ahí (si no hay `rsync`, borra todo menos `.htaccess` y copia).
 
-No hace falta reiniciar nada del lado del servidor para el frontend — Apache sirve los archivos nuevos apenas se suben.
+Un build roto nunca toca la carpeta pública. Si el frontend falla, el backend ya quedó actualizado y recargado.
+
+No hace falta reiniciar nada: Apache sirve los archivos nuevos apenas se copian.
+
+### Requisito único en el servidor
+
+Instalar nvm una vez (con el usuario que corre el deploy) para tener Node 20 disponible:
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+```
+El script hace `nvm install 20` solo si falta.
