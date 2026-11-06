@@ -72,7 +72,7 @@ De ahí en adelante, `deploy.sh` se actualiza solo en cada corrida (ver el comen
 
 Es un build estático: no hay proceso de servidor, Apache sirve los archivos de `/var/www/v2`. `deploy.sh` lo actualiza después del backend:
 
-1. `git pull --ff-only` en `/home/smid-vite-front`.
+1. `git pull --ff-only` en `/home/smidbi-vite-front`.
 2. Carga **Node 20 con nvm solo para este paso** (Vite 6 y Tailwind 4 no andan con el Node 16 del servidor; el backend y pm2 siguen con Node 16). Si nvm no está instalado y el Node es menor a 20, el script se detiene con un mensaje.
 3. `npm ci` y `npm run build` (genera `dist/`, con las variables de `.env.production`).
 4. Solo si el build salió bien, copia `dist/` a `/var/www/v2` con `rsync --delete`, **conservando el `.htaccess`** que hay ahí (si no hay `rsync`, borra todo menos `.htaccess` y copia).

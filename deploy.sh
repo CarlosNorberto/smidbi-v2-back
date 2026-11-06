@@ -23,7 +23,7 @@ set -e
 
 BACKEND_PATH="/home/smidbi-v2-back"
 PM2_BACKEND_NAME="smidbi2"
-FRONTEND_PATH="/home/smid-vite-front"
+FRONTEND_PATH="/home/smidbi-vite-front"
 FRONTEND_WEB_ROOT="/var/www/v2"
 FRONTEND_NODE_VERSION="20"
 
