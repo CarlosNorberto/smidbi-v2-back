@@ -38,6 +38,10 @@ deploy_frontend() {
         export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
         if [ -s "$NVM_DIR/nvm.sh" ]; then
             . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+            # El glibc del servidor es anterior a 2.28: el Node 20 oficial no corre ahí. Se usa el build
+            # no oficial "glibc-217" (solo hace falta al instalar; si ya está instalado, `nvm use` lo toma).
+            export NVM_NODEJS_ORG_MIRROR="https://unofficial-builds.nodejs.org/download/release"
+            nvm_get_arch() { nvm_echo "x64-glibc-217"; }
             nvm use "$FRONTEND_NODE_VERSION" >/dev/null 2>&1 || nvm install "$FRONTEND_NODE_VERSION"
         fi
         NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]")"
