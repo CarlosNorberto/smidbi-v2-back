@@ -36,8 +36,12 @@ const getAll = async (req, res) => {
     }
 }
 
-// Roles que se pueden asignar desde la pantalla de usuarios. El rol 'hidden' (de pruebas) solo se ofrece a un
-// superadmin. La pantalla identifica cada rol por su nombre (`rol`), no por su id: los ids cambian entre entornos.
+// Roles que solo un superadmin puede asignar, y cuyos usuarios solo un superadmin puede modificar: 'superadmin' (si no,
+// un admin podría darse ese rol a sí mismo, o cambiarle la contraseña a un superadmin) y 'hidden' (de pruebas).
+const SUPERADMIN_ONLY_ROLES = ['superadmin', 'hidden'];
+
+// Roles que se pueden asignar desde la pantalla de usuarios. 'superadmin' y 'hidden' solo se ofrecen a un superadmin.
+// La pantalla identifica cada rol por su nombre (`rol`), no por su id: los ids cambian entre entornos.
 const getRoles = async (req, res) => {
     try {
         let roles = await md.roles.findAll({
@@ -47,7 +51,7 @@ const getRoles = async (req, res) => {
             raw: true,
         });
         if (req.user.role?.rol !== 'superadmin') {
-            roles = roles.filter((role) => role.rol !== 'hidden');
+            roles = roles.filter((role) => !SUPERADMIN_ONLY_ROLES.includes(role.rol));
         }
         res.status(200).json(roles);
     } catch (error) {
@@ -92,11 +96,13 @@ const saveUpdate = async (req, res) => {
                 return res.status(409).json({ message: `Ya existe un usuario activo con el nombre de usuario "${usuario}". Elija otro.` });
             }
         }
-        // El rol "oculto" (para pruebas) solo lo puede asignar, o modificar, un superadmin.
+        // Los roles "superadmin" y "oculto" (para pruebas) solo los puede asignar, o modificar a quien los tenga, un
+        // superadmin. Se responde 400 y no 403: el cliente HTTP manda al inicio de sesión ante un 403.
         const requesterIsSuperAdmin = req.user?.role?.rol === 'superadmin';
         if (!requesterIsSuperAdmin) {
-            const hiddenRole = await md.roles.findOne({ where: { rol: 'hidden' }, attributes: ['id'], raw: true });
-            if (hiddenRole && (Number(role_id) === hiddenRole.id || (usuarioRecord && usuarioRecord.role_id === hiddenRole.id))) {
+            const restricted = await md.roles.findAll({ where: { rol: SUPERADMIN_ONLY_ROLES }, attributes: ['id'], raw: true });
+            const restrictedIds = restricted.map((role) => role.id);
+            if (restrictedIds.includes(Number(role_id)) || (usuarioRecord && restrictedIds.includes(usuarioRecord.role_id))) {
                 return res.status(400).json({ message: 'No tiene permisos para asignar o modificar ese rol.' });
             }
         }
