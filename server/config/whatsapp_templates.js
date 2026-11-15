@@ -42,6 +42,8 @@ TEMPLATES.nuevo_reporte = {
 // Plantilla "tarea_asignada" (aviso a los responsables de una tarea de /tasks). Texto sugerido para registrarla en Meta:
 //   "Se te asignó la tarea {{1}} en el sistema. Puedes ver el detalle en el botón de abajo."
 // + botón "Ver tarea" con URL dinámica:  https://<FRONT_URL>/admin/tasks/card/{{1}}   ({{1}} = id de la tarea)
+// OJO al registrarla en Meta: la URL del botón debe terminar en UN solo {{1}} y nada después. Si se registró mal, el link llega con el
+// marcador literal antes del id (…/card/%7B%7B1%7D%7D11417); la pantalla de tareas ya lo tolera (toma el número del final), pero conviene corregirla.
 // Quien abre el link debe iniciar sesión (es una pantalla interna); después de entrar, el sistema lo lleva a la tarea.
 // No va ligada a un proceso con destinatarios fijos: se envía al teléfono de cada responsable (ver notifyUsuarios).
 TEMPLATES.tarea_asignada = {

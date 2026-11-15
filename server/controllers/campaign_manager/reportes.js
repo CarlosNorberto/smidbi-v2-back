@@ -1551,16 +1551,30 @@ const getDashboardData = async (req, res) => {
                 .status(404)
                 .json({ message: 'No se encontró la campaña' });
         }
+        // Un cliente (sesión de empresa) solo puede ver campañas de SU empresa: sin esta comprobación podía pedir el panel
+        // de otra empresa cambiando el id de la URL. Se responde 404 (no 403) para no confirmar que esa campaña existe y
+        // porque el interceptor del frontend trata el 403 como sesión vencida. El personal interno ve cualquiera.
+        if (!req.isAuthenticated() && Number(campanas.categoria?.empresa?.id) !== Number(req.session.empresaId)) {
+            return res
+                .status(404)
+                .json({ message: 'No se encontró la campaña' });
+        }
         // La campaña (o su categoría/empresa) puede estar desactivada aunque
         // sus reportes individuales todavía tengan activo:true — no basta con
         // el filtro de reportes de más abajo, hay que validar toda la cadena.
         const empresaActiva = campanas.categoria?.empresa?.activo;
         const categoriaActiva = campanas.categoria?.activo;
-        if (!campanas.activo || !categoriaActiva || !empresaActiva) {
+        const disponibleParaCliente = !!(campanas.activo && categoriaActiva && empresaActiva);
+        // Un cliente solo ve campañas disponibles. El personal interno (sesión de usuario) SÍ puede abrir el Panel de
+        // Campaña de una inactiva: es la vista previa de cómo lo verá el cliente, para revisarlo o corregirlo antes de
+        // activarla. Antes también recibía este 403 y el interceptor del frontend lo mandaba al login de cliente.
+        if (!disponibleParaCliente && !req.isAuthenticated()) {
             return res.status(403).json({ message: 'Esta campaña ya no está disponible.' });
         }
         const resultado = campanas.toJSON();
         delete resultado.categoria;
+        // Para que la pantalla le avise al personal interno que el cliente todavía no ve esta campaña.
+        resultado.disponible_para_cliente = disponibleParaCliente;
         for (const reporte of resultado.reportes) {
             reporte.percent = await percentDias(reporte, reporte.id_objetivo);
             reporte.objetivo_logrado = await getObjetivoLogrado(

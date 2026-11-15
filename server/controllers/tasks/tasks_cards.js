@@ -114,7 +114,14 @@ const save = async (req, res) => {
             activity_detail: `Creó la tarjeta ${newCard.name ?? ''}`.trim(),
             responsible_id: req.user.id,
         });
-        res.status(201).json(newCard);
+        // La respuesta trae lo mismo que el tablero (estado de vencimiento, fecha, responsables y etiquetas vacíos), para que la
+        // tarjeta nueva se vea completa desde el inicio y no solo después de abrirla (antes faltaba "Vigente").
+        const card = newCard.toJSON();
+        card.expired_status = getExpirationStatus(newCard);
+        card.expired_date = new Date(newCard.exp_date_year, newCard.exp_date_month - 1, newCard.exp_date_day, newCard.exp_time_hour, newCard.exp_time_minute);
+        card.responsibles = [];
+        card.tags = [];
+        res.status(201).json(card);
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: 'Error al crear la tarjeta' });

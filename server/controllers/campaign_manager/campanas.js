@@ -23,7 +23,7 @@ const getById = async (req, res) => {
 const getByCategory = async (req, res) => {
     try {        
         const { category_id } = req.params;
-        const { page = 1, limit = 10, details = false, name = null } = req.query;        
+        const { page = 1, limit = 10, details = false, name = null, mes = null, gestion = null, moneda = null } = req.query;        
         const offset = (page - 1) * limit;
         let where = {
             id_categoria: category_id
@@ -32,6 +32,25 @@ const getByCategory = async (req, res) => {
             where.nombre = {
                 [md.Sequelize.Op.iLike]: `%${name}%`
             };
+        }
+        // Filtros opcionales por mes, gestión (año) y moneda.
+        if (mes) {
+            // Sin distinguir mayúsculas: hay datos antiguos en ambas formas.
+            where.mes = { [md.Sequelize.Op.iLike]: String(mes).trim() };
+        }
+        if (gestion) {
+            const year = Number.parseInt(gestion, 10);
+            if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+                return res.status(400).json({ message: 'La gestión no es válida.' });
+            }
+            where.gestion = year;
+        }
+        if (moneda) {
+            // La moneda es texto libre en los datos ('$us', '$us.', 'Bs.'...): igual que el selector del formulario, todo lo que
+            // empieza con "bs" es bolivianos y el resto dólares.
+            where.moneda = /^bs/i.test(String(moneda).trim())
+                ? { [md.Sequelize.Op.iLike]: 'bs%' }
+                : { [md.Sequelize.Op.or]: [{ [md.Sequelize.Op.notILike]: 'bs%' }, { [md.Sequelize.Op.is]: null }] };
         }
         let attributes = ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda', 'activo'];
         if (details === 'true') {
@@ -131,7 +150,8 @@ const copyCampaignAndReports = async (req, res) => {
                 moneda,
                 usuario_creacion: req.user.id,
                 id_usuario: ownerId,
-                activo: true,
+                // Nace inactiva: la copia trae reportes sin fechas ni valores, y el cliente no debe verla hasta que se active.
+                activo: false,
                 copy_from: sourceCampaign.id,
             },
             { transaction },
@@ -159,7 +179,7 @@ const copyCampaignAndReports = async (req, res) => {
 
 const create = async (req, res) => {
     try {
-        const { id_categoria, nombre, descripcion, mes, gestion, moneda } = req.body;
+        const { id_categoria, nombre, descripcion, mes, gestion, moneda, activo } = req.body;
         if (!id_categoria || !nombre || !mes || !gestion || !moneda) {
             return res.status(400).json({ message: 'id_categoria, nombre, mes, gestion y moneda son obligatorios.' });
         }
@@ -173,7 +193,9 @@ const create = async (req, res) => {
             mes,
             gestion,
             moneda,
-            activo: true,
+            // Nace INACTIVA salvo que quien la crea la active a propósito: el cliente solo ve campañas activas (menú y Panel de
+            // Campaña), así no ve una campaña vacía o a medio armar. Se activa desde la edición cuando esté lista.
+            activo: activo === true,
             usuario_creacion: req.user.id,
             // Hereda el responsable de la empresa (no el de quien la crea).
             id_usuario: (await getCategoryOwnerId(id_categoria)) ?? req.user.id,

@@ -1,4 +1,5 @@
 const md = require('../../models');
+const { isUnrestricted } = require('../../auth/ownership');
 
 const loadTracking = async (req, res) => {
     try {
@@ -9,7 +10,10 @@ const loadTracking = async (req, res) => {
             fecha_ini: { [md.Sequelize.Op.ne]: null },
         };
         let client_where = {};
-        if (user_ids) {
+        // Solo admin y superadmin pueden ver (y filtrar por) otros responsables. El resto ve únicamente lo de las empresas de las
+        // que es responsable, sin importar lo que mande en `user_ids` (el filtro del frontend se oculta, pero esto es lo que protege).
+        const restrictToOwn = !isUnrestricted(req.user);
+        if (!restrictToOwn && user_ids) {
             client_where.id_usuario = {
                 [md.Sequelize.Op.in]: user_ids
             };
@@ -86,7 +90,8 @@ const loadTracking = async (req, res) => {
                                 {
                                     model: md.empresas,
                                     as: 'empresa',
-                                    attributes: ['id', 'nombre']
+                                    attributes: ['id', 'nombre'],
+                                    ...(restrictToOwn ? { where: { id_usuario: req.user.id }, required: true } : {}),
                                 }
                             ]
                         }

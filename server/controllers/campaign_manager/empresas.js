@@ -64,6 +64,10 @@ const getAll = async (req, res) => {
     try {
         const { name = null, activo = true } = req.query;
         let where = { activo: activo };
+        // Solo admin y superadmin ven todas las empresas; el resto, únicamente de las que es responsable (la usa el filtro de Seguimiento).
+        if (!['admin', 'superadmin'].includes(req.user?.role?.rol)) {
+            where.id_usuario = req.user.id;
+        }
         if (name) {
             where.nombre = {
                 [md.Sequelize.Op.iLike]: `%${name}%`,

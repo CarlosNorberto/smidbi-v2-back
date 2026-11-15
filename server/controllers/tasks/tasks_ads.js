@@ -19,16 +19,18 @@ const getByCardId = async (req, res) => {
                     id_reporte: report_id
                 },
             });
+            // Si el reporte no tiene segmentación cargada (lo común en reportes nuevos), la pieza empieza vacía. Antes esto lanzaba
+            // un error 500 y el frontend reintentaba 3 veces (≈7 s) antes de mostrar la pieza: por eso "tardaba mucho en cargar".
             res.status(200).json({
                 card_id: card_id,
                 material_links: null,
                 platform_links: null,
                 cta_ad: null,
                 template: null,
-                seg_segmentations: segmentacion.segmentacion ? segmentacion.segmentacion : null,
-                seg_ages: segmentacion.demografia ? segmentacion.demografia : null,
-                seg_cities: segmentacion.geo_segmentacion ? segmentacion.geo_segmentacion : null
-            });            
+                seg_segmentations: segmentacion?.segmentacion ?? null,
+                seg_ages: segmentacion?.demografia ?? null,
+                seg_cities: segmentacion?.geo_segmentacion ?? null
+            });          
         }        
     } catch (error) {
         res.status(500).json({ message: `Error al obtener el anuncio: ${error.message}` });
