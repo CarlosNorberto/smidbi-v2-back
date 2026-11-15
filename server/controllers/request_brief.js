@@ -1,4 +1,5 @@
 const md = require('../models');
+const { QueryTypes } = require('sequelize');
 const { notifyProceso } = require('../services/whatsappNotificationService');
 const { verifyBriefCode } = require('../utils/briefLink');
 const { getLatestByBriefIds, checkCanInvalidate, deleteProposals, removeFiles } = require('./planificador/proposal_service');
@@ -90,14 +91,67 @@ const duplicate = async (req, res) => {
 // que el Planificador tenga de dónde leer Estrategia/Audiencia al armar el PDF
 // de la propuesta (antes se editaba en un wizard aparte al generar el PDF, acá
 // queda persistido en el brief como cualquier otro dato).
+//
+// Son todos los campos que el formulario público NO pregunta (más Estrategia): Url destino, Url descarga App, Recursos
+// gráficos/audiovisuales, Medios y la segmentación. `geolocalizacion` (el país) NO está aquí: la llena el cliente en el
+// formulario (ver createPublic) y en el detalle se consulta, como el resto de lo que llena el cliente. Lo que el cliente sí llena
+// (contacto, objetivo, redes, fechas, presupuesto...) no se edita aquí.
 const STRATEGY_FIELDS = [
     'estrategia',
     'url_destino',
-    'intereses',
-    'segmentacion_sexo',
-    'segmentacion_edad',
+    'url_descarga_app',
+    'recursos_graficos',
+    'recursos_audiovisuales',
     'geolocalizacion_ciudad',
+    'segmentacion_edad',
+    'segmentacion_sexo',
+    'intereses',
+    'medios',
 ];
+// De esos, los que se muestran en el PDF de la propuesta (portada, resumen ejecutivo y audiencia, ver
+// planificador/pdf_template.js): solo si cambia alguno el PDF vigente queda obsoleto y se invalida. Los demás (Url destino,
+// Url descarga App, Recursos, Geolocalización y Medios) no aparecen en el PDF, así que editarlos no lo toca.
+const PDF_STRATEGY_FIELDS = ['estrategia', 'intereses', 'segmentacion_sexo', 'segmentacion_edad', 'geolocalizacion_ciudad'];
+
+const STRATEGY_LABELS = {
+    estrategia: 'Estrategia', url_destino: 'Url destino', url_descarga_app: 'Url descarga App',
+    recursos_graficos: 'Recursos gráficos', recursos_audiovisuales: 'Recursos audiovisuales',
+    geolocalizacion_ciudad: 'Ciudades', segmentacion_edad: 'Edad',
+    segmentacion_sexo: 'Sexo', intereses: 'Intereses', medios: 'Medios',
+};
+const STRATEGY_TEXT_MAX = { url_destino: 200, url_descarga_app: 200, estrategia: 10000 };
+const STRATEGY_BOOLEANS = ['recursos_graficos', 'recursos_audiovisuales'];
+const STRATEGY_LISTS = ['geolocalizacion_ciudad', 'segmentacion_edad', 'segmentacion_sexo', 'intereses', 'medios'];
+
+// Valida y normaliza lo que llega a updateStrategy. Devuelve { data } o { error }. Solo mira los campos que vienen en el
+// cuerpo (cada bloque de la pantalla guarda únicamente los suyos).
+const buildStrategyData = (body) => {
+    const data = {};
+    for (const field of STRATEGY_FIELDS) {
+        const value = body[field];
+        if (value === undefined) continue;
+        const label = STRATEGY_LABELS[field];
+        if (STRATEGY_BOOLEANS.includes(field)) {
+            if (typeof value !== 'boolean') return { error: `El campo "${label}" debe ser Sí o No.` };
+            data[field] = value;
+        } else if (STRATEGY_LISTS.includes(field)) {
+            if (!Array.isArray(value) || value.length > 100 || value.some((item) => typeof item !== 'string')) {
+                return { error: `El campo "${label}" no es válido.` };
+            }
+            const items = value.map((item) => item.trim()).filter(Boolean);
+            if (items.some((item) => item.length > 100)) return { error: `Cada valor de "${label}" admite hasta 100 caracteres.` };
+            data[field] = items;
+        } else {
+            if (value !== null && typeof value !== 'string') return { error: `El campo "${label}" no es válido.` };
+            const text = value === null ? null : value.trim();
+            if (text && text.length > STRATEGY_TEXT_MAX[field]) {
+                return { error: `El campo "${label}" supera los ${STRATEGY_TEXT_MAX[field]} caracteres.` };
+            }
+            data[field] = text || null;
+        }
+    }
+    return { data };
+};
 
 const updateStrategy = async (req, res) => {
     try {
@@ -107,12 +161,10 @@ const updateStrategy = async (req, res) => {
             return res.status(404).json({ message: 'No se encontró la solicitud de brief' });
         }
 
-        const data = {};
-        STRATEGY_FIELDS.forEach((field) => {
-            if (req.body[field] !== undefined) data[field] = req.body[field];
-        });
+        const { data, error } = buildStrategyData(req.body || {});
+        if (error) return res.status(400).json({ message: error });
 
-        // Estos campos se muestran en el PDF de la propuesta (Objetivo, Audiencia): si
+        // Los campos de PDF_STRATEGY_FIELDS se muestran en el PDF de la propuesta (Objetivo, Audiencia): si
         // alguno realmente cambió, el PDF vigente queda obsoleto y se invalida (con la
         // misma regla que la cotización si el cliente ya lo aceptó). Valores vacíos
         // (null / '' / []) se consideran iguales y los arreglos se comparan como conjuntos.
@@ -121,7 +173,9 @@ const updateStrategy = async (req, res) => {
             return v === null || v === undefined ? '' : String(v).trim();
         };
         const normalizeEmptyArray = (v) => (Array.isArray(v) && v.length === 0 ? '' : normalize(v));
-        const changed = Object.keys(data).some((field) => normalizeEmptyArray(data[field]) !== normalizeEmptyArray(requestBrief[field]));
+        const changed = Object.keys(data)
+            .filter((field) => PDF_STRATEGY_FIELDS.includes(field))
+            .some((field) => normalizeEmptyArray(data[field]) !== normalizeEmptyArray(requestBrief[field]));
 
         let oldFiles = [];
         if (changed) {
@@ -144,6 +198,26 @@ const updateStrategy = async (req, res) => {
         res.status(200).json({ ...requestBrief.toJSON(), proposal_invalidated: oldFiles.length > 0 });
     } catch (error) {
         res.status(500).json({ message: `Error al guardar la estrategia del brief: ${error.message}` });
+    }
+};
+
+// --- PAÍSES DEL FORMULARIO PÚBLICO ------------------------------------------
+// El país del brief (`geolocalizacion`) debe ser uno de los mapas de la tabla `mapas` (compartida con la app antigua): esa app
+// busca el mapa POR NOMBRE al activar la campaña y falla si el nombre no existe. Por eso la lista sale de esa tabla y no está
+// escrita aquí. Bolivia (el primero) es el valor por defecto.
+const DEFAULT_COUNTRY = 'Bolivia';
+
+const getCountryNames = async () => {
+    const rows = await md.sequelize.query('SELECT mapa FROM mapas ORDER BY id', { type: QueryTypes.SELECT });
+    return rows.map((row) => row.mapa);
+};
+
+// GET /public/request_briefs/countries — países que puede elegir el cliente en el formulario público (sin login).
+const getCountries = async (req, res) => {
+    try {
+        res.status(200).json(await getCountryNames());
+    } catch (error) {
+        res.status(500).json({ message: 'No se pudo obtener la lista de países.' });
     }
 };
 
@@ -173,7 +247,7 @@ const MAX_LENGTHS = {
 };
 const REQUIRED_TEXT = ['nombre_empresa', 'responsable', 'nombre_campana', 'mail', 'telefono', 'descripcion', 'publico_objetivo'];
 const OPTIONAL_TEXT = [
-    'slogan', 'url', 'url_fanpage', 'url_instagram', 'url_tiktok', 'url_youtube', 'url_linkedin', 'competencia_directa', 'kpis', 'entregables',
+    'slogan', 'url', 'url_fanpage', 'url_instagram', 'url_tiktok', 'url_youtube', 'url_linkedin', 'url_twitter', 'competencia_directa', 'kpis', 'entregables',
 ];
 const MONEDAS_VALIDAS = ['$us.', 'Bs.'];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -228,7 +302,9 @@ const buildPublicBriefData = (body) => {
     // El formulario simplificado ya no pregunta segmentación ni etapas del embudo (el equipo las completa al
     // armar la estrategia, desde el detalle del brief). Las columnas de la base son NOT NULL (tabla compartida
     // con la app antigua), así que se guardan vacías / en falso.
-    data.geolocalizacion = 'Bolivia';
+    // `geolocalizacion` (país): la columna es obligatoria. Aquí va el valor por defecto; createPublic lo reemplaza por el
+    // país que eligió el cliente, ya validado contra la tabla `mapas`.
+    data.geolocalizacion = DEFAULT_COUNTRY;
     data.geolocalizacion_ciudad = [];
     data.segmentacion_edad = [];
     data.segmentacion_sexo = [];
@@ -256,6 +332,13 @@ const createPublic = async (req, res) => {
 
         const { data, error } = buildPublicBriefData(req.body || {});
         if (error) return res.status(400).json({ message: error });
+
+        // País elegido por el cliente (por defecto Bolivia). Debe existir en la tabla `mapas`.
+        const pais = cleanText(req.body.geolocalizacion) || DEFAULT_COUNTRY;
+        if (!(await getCountryNames()).includes(pais)) {
+            return res.status(400).json({ message: 'El país seleccionado no es válido.' });
+        }
+        data.geolocalizacion = pais;
 
         const created = await md.request_brief.create({
             ...data,
@@ -301,6 +384,7 @@ module.exports = {
     getById,
     duplicate,
     updateStrategy,
+    getCountries,
     createPublic,
     getPublicView,
 };

@@ -1,6 +1,7 @@
 const { sessionAuth, requireRole, clientSessionAuth } = require('../auth/middleware');
 const { rateLimit } = require('../auth/rate_limit');
 const usuarios = require('../controllers/usuarios');
+const impersonation = require('../controllers/impersonation');
 const utilities = require('../controllers/utilities');
 const systemSettings = require('../controllers/system_settings');
 const clientAuth = require('../controllers/client_auth');
@@ -42,6 +43,11 @@ module.exports = (app) => {
     // siempre exige la contraseña actual (no es parte de la gestión de usuarios).
     app.put(process.env.PREFIX_API + '/users/change_password/:id', sessionAuth, usuarios.changePassword);
 
+    // "Ingresar como" otro usuario (solo superadmin; ver controllers/impersonation.js). La salida solo exige sesión: mientras se
+    // está como otro usuario, `req.user` es ese usuario y no pasaría `requireRole('superadmin')`.
+    app.post(process.env.PREFIX_API + '/auth/impersonate/exit', sessionAuth, impersonation.exit);
+    app.post(process.env.PREFIX_API + '/auth/impersonate/:id', sessionAuth, requireRole('superadmin'), impersonation.start);
+
     // AUTH DE CLIENTES (empresas) - independiente del login de usuarios internos
     app.post(process.env.PREFIX_API + '/auth/client/login', clientAuth.login);
     app.get(process.env.PREFIX_API + '/auth/client/token/:token', clientAuth.loginByToken);
@@ -74,6 +80,12 @@ module.exports = (app) => {
         process.env.PREFIX_API + '/public/request_briefs',
         rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: 'Ha enviado demasiadas solicitudes. Intente nuevamente más tarde.' }),
         requestBrief.createPublic
+    );
+    // Países que puede elegir el cliente en el formulario público (sin login; salen de la tabla `mapas`).
+    app.get(
+        process.env.PREFIX_API + '/public/request_briefs/countries',
+        rateLimit({ windowMs: 60 * 60 * 1000, max: 120, message: 'Demasiadas consultas. Intente nuevamente más tarde.' }),
+        requestBrief.getCountries
     );
     // Brief de solo lectura para el link firmado de la plantilla de WhatsApp (sin login; ver utils/briefLink.js).
     app.get(

@@ -60,6 +60,11 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// "INGRESAR COMO": registro de lo que hace un superadmin con la sesión de otro usuario (system_events, categoría 'suplantacion')
+const { installAuditHooks, impersonationContext } = require('./server/services/impersonationService');
+installAuditHooks();
+app.use(impersonationContext);
+
 // LOGIN STRATEGY
 LoginLocalStrategy(app);
 

@@ -12,6 +12,7 @@ const CATEGORIES = {
     whatsapp: 'WhatsApp',
     servidor: 'Servidor',
     seguridad: 'Seguridad',
+    suplantacion: 'Ingresos como otro usuario',
 };
 const RETENTION_DAYS = 90;
 
@@ -49,7 +50,7 @@ const logEvent = ({ level = 'error', category, source = null, message, detail = 
 const purgeOldEvents = async () => {
     try {
         const limit = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
-        const deleted = await md.system_events.destroy({ where: { created_at: { [Op.lt]: limit } } });
+        const deleted = await md.system_events.destroy({ where: { created_at: { [Op.lt]: limit }, category: { [Op.ne]: 'suplantacion' } } });
         if (deleted) console.log(`[system_events] ${deleted} eventos de más de ${RETENTION_DAYS} días eliminados`);
     } catch (e) {
         console.error('[system_events] No se pudo limpiar el registro:', e.message);

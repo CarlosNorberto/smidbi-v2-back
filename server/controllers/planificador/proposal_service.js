@@ -49,7 +49,7 @@ const checkCanInvalidate = async ({ id_brief, user, confirmEditAccepted, transac
             status: 403,
             body: {
                 code: 'PROPOSAL_ACCEPTED',
-                message: 'El cliente ya aceptó esta propuesta. Solo un usuario admin o superadmin puede editarla.',
+                message: 'El cliente ya aceptó esta propuesta. Solo un administrador puede editarla.',
             },
         };
     }
