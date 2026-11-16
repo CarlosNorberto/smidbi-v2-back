@@ -63,6 +63,8 @@ module.exports = (app) => {
     app.get(process.env.PREFIX_API + '/utilities/company_search', sessionAuth, utilities.companySearch);
 
     // CONFIGURACIONES GENERALES (acceso exclusivo para superadmin)
+    // Modelos de IA que ofrece la cuenta (para elegir el modelo del asistente).
+    app.get(process.env.PREFIX_API + '/system_settings/ai_models', sessionAuth, requireRole('superadmin'), systemSettings.getAiModels);
     app.get(process.env.PREFIX_API + '/system_settings/all', sessionAuth, requireRole('superadmin'), systemSettings.getAll);
     app.get(process.env.PREFIX_API + '/system_settings/one/:id', sessionAuth, requireRole('superadmin'), systemSettings.getById);
     app.post(process.env.PREFIX_API + '/system_settings/create', sessionAuth, requireRole('superadmin'), systemSettings.create);

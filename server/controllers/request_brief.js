@@ -255,6 +255,15 @@ const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const cleanText = (value) => (typeof value === 'string' ? value.trim() : '');
 
+// 'AAAA-MM-DD' que además sea un día real del calendario: la expresión regular deja pasar "2026-02-31" (se guardaba como otra
+// fecha, 3 de marzo) y "2026-13-01" (la base lo rechazaba y el cliente veía un error genérico).
+const isRealDate = (value) => {
+    if (typeof value !== 'string' || !DATE_REGEX.test(value)) return false;
+    const [y, m, d] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+};
+
 // Valida y normaliza el body del formulario público. Devuelve { data } o { error }.
 const buildPublicBriefData = (body) => {
     const data = {};
@@ -284,7 +293,7 @@ const buildPublicBriefData = (body) => {
     data.recursos_graficos = body.recursos_graficos === true;
     data.recursos_audiovisuales = body.recursos_audiovisuales === true;
 
-    if (!DATE_REGEX.test(body.fecha_inicio) || !DATE_REGEX.test(body.fecha_fin)) {
+    if (!isRealDate(body.fecha_inicio) || !isRealDate(body.fecha_fin)) {
         return { error: 'Las fechas de la campaña no son válidas.' };
     }
     if (body.fecha_fin < body.fecha_inicio) return { error: 'La fecha final no puede ser anterior a la inicial.' };

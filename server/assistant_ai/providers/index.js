@@ -17,6 +17,9 @@ const { AiError } = require('./ai_error');
 // Configuración (system_settings, módulo 'assistant_ai'):
 //   provider        proveedor activo (por defecto 'openai')
 //   <proveedor>_api_key   clave del proveedor (openai_api_key, ...)
+//   <proveedor>_model_smart / <proveedor>_model_fast   modelo de las respuestas / de las tareas cortas (opcionales: sin valor, el
+//                         proveedor usa los suyos). Se eligen en Configuraciones; allí se PRUEBAN antes de guardar y `resetAICache`
+//                         hace que valgan desde la siguiente pregunta. Un proveedor nuevo debe exportar `listModels` y `testModel`.
 const PROVIDERS = {
     openai: require('./openai.provider'),
 };
@@ -25,12 +28,19 @@ const MODULE = 'assistant_ai';
 
 // Se cachea unos minutos para no consultar la BD en cada mensaje del chat.
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const cache = { ai: null, provider: null, apiKey: null, at: 0 };
+const cache = { ai: null, provider: null, apiKey: null, models: '', at: 0 };
 
 const readSetting = async (key) => {
     const setting = await md.system_settings.findOne({ where: { module: MODULE, key, active: true } });
     return typeof setting?.value === 'string' ? setting.value.trim() : '';
 };
+
+// Los modelos se eligen en Configuraciones (`<proveedor>_model_smart` para las respuestas y `<proveedor>_model_fast` para las
+// tareas cortas). Si no hay valor, el proveedor usa los suyos por defecto.
+const readModels = async (provider) => ({
+    smart: (await readSetting(`${provider}_model_smart`)) || undefined,
+    fast: (await readSetting(`${provider}_model_fast`)) || undefined,
+});
 
 const getAI = async () => {
     const now = Date.now();
@@ -42,14 +52,33 @@ const getAI = async () => {
     }
     const apiKey = await readSetting(`${provider}_api_key`);
     if (!apiKey) throw new AiError('AI_NOT_CONFIGURED', { provider });
+    const models = await readModels(provider);
+    const modelsKey = JSON.stringify(models);
 
-    if (!cache.ai || provider !== cache.provider || apiKey !== cache.apiKey) {
-        cache.ai = PROVIDERS[provider].create(apiKey);
+    if (!cache.ai || provider !== cache.provider || apiKey !== cache.apiKey || modelsKey !== cache.models) {
+        cache.ai = PROVIDERS[provider].create(apiKey, models);
         cache.provider = provider;
         cache.apiKey = apiKey;
+        cache.models = modelsKey;
     }
     cache.at = now;
     return cache.ai;
 };
 
-module.exports = { getAI, PROVIDER_NAMES: Object.keys(PROVIDERS) };
+// Descarta la copia guardada: se llama al cambiar una configuración del asistente (clave, proveedor o modelos) para que el
+// cambio valga desde la siguiente pregunta, sin esperar los minutos de la caché.
+const resetAICache = () => {
+    cache.ai = null;
+    cache.at = 0;
+};
+
+// Proveedor activo y su clave (para listar y probar modelos desde Configuraciones).
+const getActiveProvider = async () => {
+    const name = (await readSetting('provider')) || DEFAULT_PROVIDER;
+    if (!PROVIDERS[name]) throw new AiError('AI_NOT_CONFIGURED', { provider: name });
+    const apiKey = await readSetting(`${name}_api_key`);
+    if (!apiKey) throw new AiError('AI_NOT_CONFIGURED', { provider: name });
+    return { name, apiKey, module: PROVIDERS[name] };
+};
+
+module.exports = { getAI, resetAICache, getActiveProvider, PROVIDER_NAMES: Object.keys(PROVIDERS), MODULE };
