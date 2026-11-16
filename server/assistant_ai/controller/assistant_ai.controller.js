@@ -18,6 +18,11 @@ async function handleChat(req, res) {
 
         // ── 1. Extract intent and entities from question ──
         const entities = await extractEntities(question);
+        // "Mis campañas activas" a veces se clasifica como "campañas activas de un cliente" sin que la pregunta nombre ninguna
+        // empresa: no hay a quién buscar y respondía "no se encontró". Sin empresa, es el resumen de las campañas del usuario.
+        if (entities.intent === 'active_campaigns' && !entities.company_name) {
+            entities.intent = 'my_campaigns_status';
+        }
         const needs = getNeeds(entities.intent);
         const tool = getTool(entities.intent);
 

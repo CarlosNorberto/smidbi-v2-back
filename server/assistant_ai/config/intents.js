@@ -30,8 +30,8 @@ const INTENTS = {
     active_campaigns: {
         needs: ['company'],
         tool: 'get_active_campaigns',
-        description: 'Lista de campañas activas de un cliente',
-        keywords: 'campañas activas, campañas vigentes, listado de campañas',
+        description: 'Lista de campañas activas de UN cliente (empresa) que la pregunta nombra. Si no nombra ninguna empresa y habla en primera persona ("mis campañas activas"), NO es esta: es my_campaigns_status.',
+        keywords: 'campañas activas de [empresa], campañas vigentes de [empresa], listado de campañas de [empresa]',
         neutral_question: 'Dame las campañas activas de este cliente'
     },
     active_clients: {
@@ -80,7 +80,7 @@ const INTENTS = {
         needs: [],
         tool: 'get_my_campaigns',
         description: 'Resumen de todas las campañas asignadas al usuario actual.',
-        keywords: 'mis campañas, mis reportes, lo que tengo asignado, mis cuentas',
+        keywords: 'mis campañas, mis campañas activas, mis campañas vigentes, qué campañas tengo, mis reportes, lo que tengo asignado, mis cuentas',
         neutral_question: 'Dame el resumen de mis campañas'
     },
     my_low_performance: {

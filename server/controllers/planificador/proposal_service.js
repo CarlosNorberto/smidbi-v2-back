@@ -46,7 +46,9 @@ const checkCanInvalidate = async ({ id_brief, user, confirmEditAccepted, transac
     if (!accepted) return null;
     if (!isAdminUser(user)) {
         return {
-            status: 403,
+            // 400 y no 403: el cliente HTTP del frontend manda al login ante cualquier 403 (sacaba de la sesión al usuario
+            // que intentaba editar una propuesta ya aceptada).
+            status: 400,
             body: {
                 code: 'PROPOSAL_ACCEPTED',
                 message: 'El cliente ya aceptó esta propuesta. Solo un administrador puede editarla.',

@@ -352,6 +352,11 @@ const generateAccessToken = async (req, res) => {
         if (!empresa) {
             return res.status(404).json({ message: 'Empresa no encontrada' });
         }
+        // Solo quien gestiona la empresa (su responsable, admin o superadmin): antes cualquier usuario con sesión podía
+        // generar, ver o revocar el link de acceso de cliente de CUALQUIER empresa.
+        if (!(await canManageCompany(req.user, empresa.id))) {
+            return denyAccess(res);
+        }
         const access_token = crypto.randomBytes(32).toString('hex');
         await empresa.update({ access_token });
         res.status(200).json({ access_token });
@@ -375,6 +380,9 @@ const getAccessToken = async (req, res) => {
         if (!empresa) {
             return res.status(404).json({ message: 'Empresa no encontrada' });
         }
+        if (!(await canManageCompany(req.user, empresa.id))) {
+            return denyAccess(res);
+        }
         res.status(200).json({ access_token: empresa.access_token });
     } catch (error) {
         res.status(500).json({
@@ -389,6 +397,9 @@ const revokeAccessToken = async (req, res) => {
         const empresa = await md.empresas.findByPk(id);
         if (!empresa) {
             return res.status(404).json({ message: 'Empresa no encontrada' });
+        }
+        if (!(await canManageCompany(req.user, empresa.id))) {
+            return denyAccess(res);
         }
         await empresa.update({ access_token: null });
         res.status(200).json({
