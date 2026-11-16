@@ -221,6 +221,12 @@ const isCampaignActive = async (campaignId, transaction = null) => {
     return !campana || campana.activo !== false;
 };
 
+// El Funnel de Conversión necesita las DOS cifras que se cargan a mano en la campaña: sin sesiones no hay paso de clicks a
+// sesiones y sin conversiones no hay tasa final ni costo por adquisición (quedaría un embudo con huecos). Mientras falte una,
+// no se ofrece la casilla en los reportes y el panel no dibuja el funnel; las marcas ya guardadas NO se borran (si se
+// restauran los valores, todo vuelve solo).
+const funnelCalculable = (campana) => (Number(campana?.sesiones) || 0) > 0 && (Number(campana?.conversiones) || 0) > 0;
+
 const saveUpdate = async (req, res) => {
     const transaction = await md.sequelize.transaction();
     try {
@@ -255,6 +261,17 @@ const saveUpdate = async (req, res) => {
         } else if (!(await canManageCampaign(req.user, body.id_campana))) {
             await transaction.rollback();
             return denyAccess(res);
+        }
+
+        // El funnel solo se puede marcar/desmarcar si la campaña tiene sesiones y conversiones (el panel no tiene con qué
+        // calcularlo coherentemente). Si no las tiene, el valor que llegue se ignora y la marca guardada se conserva: la
+        // pantalla oculta la casilla en ese caso, pero un "Guardar todo" igual reenvía el valor que cargó del reporte.
+        if (body.funnel !== undefined) {
+            const campanaFunnel = await md.campanas.findByPk(isNewReport ? body.id_campana : report.id_campana, {
+                attributes: ['sesiones', 'conversiones'],
+                transaction,
+            });
+            if (!funnelCalculable(campanaFunnel)) delete body.funnel;
         }
 
         // fecha_ini/fecha_fin viajan como 'YYYY-MM-DD' (fecha calendario, sin
@@ -1340,6 +1357,62 @@ const getMapByReportID = async (req, res) => {
 };
 
 // ************** DASHBOARD
+// ids de `objetivos` que cuentan como "clicks" del Funnel de Conversión, en orden de preferencia: Clicks (10) e Interacciones (2).
+const FUNNEL_CLICK_OBJETIVOS = [10, 2];
+
+const round1 = (n) => Math.round(n * 10) / 10;
+
+// "Funnel de Conversión" del Panel de Campaña (a nivel de campaña, no de reporte): impresiones → clicks → sesiones →
+// conversiones. Mismas reglas que el front antiguo (`section-funnel`):
+//  - las etapas salen SOLO de los reportes marcados con `funnel` (el mismo recorrido de principio a fin; la app antigua
+//    sumaba las impresiones de todos los reportes y mezclaba dos poblaciones);
+//  - clicks: un solo valor por reporte, "Clicks" si lo tiene (principal o secundario) y si no "Interacciones";
+//  - impresiones: objetivo principal 3, o el KPI secundario 3, de cada reporte marcado;
+//  - sesiones y conversiones: números que se cargan a mano en la campaña, con sus etiquetas;
+//  - costo por adquisición: lo gastado de los reportes con funnel (sin pasar del presupuesto de cada uno) / conversiones.
+// Devuelve null (el panel no dibuja el bloque) si ningún reporte tiene el funnel marcado o si a la campaña le falta
+// sesiones o conversiones (`funnelCalculable`). `reportes` ya trae `objetivo_logrado` y `progreso_presupuesto` calculados.
+const buildFunnelConversion = (campana, reportes) => {
+    const sesiones = Number(campana.sesiones) || 0;
+    const conversiones = Number(campana.conversiones) || 0;
+    const conFunnel = reportes.filter((r) => r.funnel === true);
+    if (conFunnel.length === 0 || !funnelCalculable(campana)) return null;
+
+    // Las cuatro etapas salen SOLO de los reportes marcados, para medir el mismo recorrido de principio a fin.
+    let clicks = 0;
+    let impresiones = 0;
+    let gastado = 0;
+    for (const r of conFunnel) {
+        // Clicks de un reporte: UN solo valor, para no contar dos veces (las interacciones ya suelen incluir los clicks).
+        // Se prefiere el KPI "Clicks" (principal o secundario) y, si el reporte no lo tiene, "Interacciones".
+        const valorDe = (idObjetivo) => (r.id_objetivo === idObjetivo
+            ? Number(r.objetivo_logrado) || 0
+            : getSecundarioValor(r, idObjetivo));
+        const tiene = (idObjetivo) => r.id_objetivo === idObjetivo
+            || (r.objetivos_secundarios || []).some((s) => s.id_objetivo === idObjetivo);
+        const idClicks = FUNNEL_CLICK_OBJETIVOS.find(tiene); // el orden de FUNNEL_CLICK_OBJETIVOS es la preferencia
+        if (idClicks !== undefined) clicks += valorDe(idClicks);
+
+        impresiones += valorDe(OBJETIVO_IMPRESIONES_ID);
+        gastado += Math.min(Number(r.progreso_presupuesto) || 0, Number(r.presupuesto) || 0);
+    }
+
+    // Una tasa que no se puede calcular (falta el dato de la etapa anterior) va como null: el panel muestra "—", no 0 %.
+    return {
+        impresiones,
+        clicks,
+        sesiones,
+        conversiones,
+        etiqueta_sesiones: campana.etiqueta_sesiones || 'Sesiones',
+        etiqueta_conversiones: campana.etiqueta_conversiones || 'Conversiones',
+        moneda: campana.moneda,
+        ctr: impresiones > 0 ? round1((clicks / impresiones) * 100) : null,
+        tasa_sesiones: clicks > 0 ? round1((sesiones / clicks) * 100) : null,
+        tasa_conversion: sesiones > 0 ? round1((conversiones / sesiones) * 100) : null,
+        costo_adquisicion: conversiones > 0 ? Math.round((gastado / conversiones) * 100) / 100 : null,
+    };
+};
+
 const getDashboardData = async (req, res) => {
     try {
         const { campaign_id } = req.params;
@@ -1347,6 +1420,11 @@ const getDashboardData = async (req, res) => {
             attributes: [
                 'id',
                 'activo',
+                'moneda',
+                'sesiones',
+                'conversiones',
+                'etiqueta_sesiones',
+                'etiqueta_conversiones',
                 [
                     md.Sequelize.fn(
                         'TRIM',
@@ -1384,6 +1462,7 @@ const getDashboardData = async (req, res) => {
                         'id_objetivo',
                         'cp',
                         'presupuesto',
+                        'funnel',
                     ],
                     include: [
                         {
@@ -1598,6 +1677,13 @@ const getDashboardData = async (req, res) => {
                     objetivo_secundario.valor;
             }
         }
+        // El bloque del funnel va a nivel de campaña; las columnas crudas de la campaña no hace falta enviarlas.
+        resultado.funnel_conversion = buildFunnelConversion(resultado, resultado.reportes);
+        delete resultado.sesiones;
+        delete resultado.conversiones;
+        delete resultado.etiqueta_sesiones;
+        delete resultado.etiqueta_conversiones;
+        delete resultado.moneda;
         res.status(200).json(resultado);
     } catch (error) {
         res.status(500).json({

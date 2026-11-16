@@ -2,6 +2,42 @@ const md = require('../../models');
 const { copyReportWithChildren } = require('./reportes');
 const { canManageCategory, canManageCampaign, getCategoryOwnerId, getCampaignOwnerId, denyAccess } = require('../../auth/ownership');
 
+// Datos del "Funnel de Conversión" del Panel de Campaña (se cargan a mano en la campaña): sesiones y conversiones son
+// conteos enteros >= 0 y las etiquetas son los nombres que ve el cliente ("Aperturas de chat", "Inicio de Chat"...).
+const FUNNEL_LABEL_DEFAULTS = { etiqueta_sesiones: 'Sesiones', etiqueta_conversiones: 'Conversiones' };
+const FUNNEL_FIELD_NAMES = {
+    sesiones: 'Las sesiones',
+    conversiones: 'Las conversiones',
+    etiqueta_sesiones: 'La etiqueta de sesiones',
+    etiqueta_conversiones: 'La etiqueta de conversiones',
+};
+
+// Devuelve { values } con solo los campos del funnel que vinieron en el body, ya validados y limpios, o { error } si
+// alguno no vale. Lo que no viene no se toca: un guardado que no los envía no los pisa.
+const pickFunnelFields = (body) => {
+    const values = {};
+    for (const field of ['sesiones', 'conversiones']) {
+        if (body[field] === undefined) continue;
+        const number = body[field] === null || body[field] === '' ? 0 : Number(body[field]);
+        if (!Number.isSafeInteger(number) || number < 0) {
+            return { error: `${FUNNEL_FIELD_NAMES[field]} deben ser un número entero igual o mayor a cero.` };
+        }
+        values[field] = number;
+    }
+    for (const field of ['etiqueta_sesiones', 'etiqueta_conversiones']) {
+        if (body[field] === undefined) continue;
+        const text = String(body[field] ?? '').trim();
+        if (text.length > 100) return { error: `${FUNNEL_FIELD_NAMES[field]} no puede pasar de 100 caracteres.` };
+        values[field] = text || FUNNEL_LABEL_DEFAULTS[field];
+    }
+    return { values };
+};
+
+// Cargar o cambiar esas cifras es exclusivo de un superadmin (el resto de roles ni ve la sección). Se responde 400 y no 403:
+// el cliente HTTP del frontend manda al login ante un 403. En el mensaje se dice "administrador" (nunca "superadmin").
+const FUNNEL_FIELDS_FORBIDDEN = { message: 'Las sesiones y conversiones de la campaña solo las puede cambiar un administrador.' };
+const canEditFunnelFields = (user) => user?.role?.rol === 'superadmin';
+
 const getById = async (req, res) => {
     try {
         const { id } = req.params;
@@ -9,7 +45,7 @@ const getById = async (req, res) => {
             where: {
                 id: id,
             },
-            attributes: ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda', 'activo'],
+            attributes: ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda', 'activo', 'sesiones', 'conversiones', 'etiqueta_sesiones', 'etiqueta_conversiones'],
         });
         if (!campana) {
             return res.status(404).json({ message: 'Campaña no encontrada' });
@@ -52,7 +88,7 @@ const getByCategory = async (req, res) => {
                 ? { [md.Sequelize.Op.iLike]: 'bs%' }
                 : { [md.Sequelize.Op.or]: [{ [md.Sequelize.Op.notILike]: 'bs%' }, { [md.Sequelize.Op.is]: null }] };
         }
-        let attributes = ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda', 'activo'];
+        let attributes = ['id', 'nombre', 'descripcion', 'mes', 'gestion', 'moneda', 'activo', 'sesiones', 'conversiones', 'etiqueta_sesiones', 'etiqueta_conversiones'];
         if (details === 'true') {
             attributes = { exclude: ['usuario_creacion', 'usuario_modificacion', 'usuario_eliminacion'] };
         }
@@ -186,6 +222,11 @@ const create = async (req, res) => {
         if (!(await canManageCategory(req.user, id_categoria))) {
             return denyAccess(res);
         }
+        const funnel = pickFunnelFields(req.body);
+        if (funnel.error) return res.status(400).json({ message: funnel.error });
+        if (Object.keys(funnel.values).length > 0 && !canEditFunnelFields(req.user)) {
+            return res.status(400).json(FUNNEL_FIELDS_FORBIDDEN);
+        }
         const campana = await md.campanas.create({
             id_categoria,
             nombre,
@@ -193,6 +234,7 @@ const create = async (req, res) => {
             mes,
             gestion,
             moneda,
+            ...funnel.values,
             // Nace INACTIVA salvo que quien la crea la active a propósito: el cliente solo ve campañas activas (menú y Panel de
             // Campaña), así no ve una campaña vacía o a medio armar. Se activa desde la edición cuando esté lista.
             activo: activo === true,
@@ -211,6 +253,15 @@ const update = async (req, res) => {
     try {
         const { id } = req.params;
         const { nombre, descripcion, mes, gestion, moneda, activo } = req.body;
+        const funnel = pickFunnelFields(req.body);
+        if (funnel.error) {
+            await t.rollback();
+            return res.status(400).json({ message: funnel.error });
+        }
+        if (Object.keys(funnel.values).length > 0 && !canEditFunnelFields(req.user)) {
+            await t.rollback();
+            return res.status(400).json(FUNNEL_FIELDS_FORBIDDEN);
+        }
         const campana = await md.campanas.findByPk(id, { transaction: t });
         if (!campana) {
             await t.rollback();
@@ -236,6 +287,7 @@ const update = async (req, res) => {
             gestion,
             moneda,
             activo,
+            ...funnel.values,
             usuario_modificacion: req.user.id,
             fecha_modificacion: new Date(),
         }, { transaction: t });
