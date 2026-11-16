@@ -20,6 +20,8 @@ const convertImageToBase64 = async (imagePath) => {
 };
 
 const getObjetivoLogrado = async (idReporte, idObjetivo) => {
+    // Sin reporte u objetivo no hay nada que sumar (y Sequelize lanza un error si el filtro llega con `undefined`).
+    if (!idReporte || !idObjetivo) return 0;
     const objetivoLogrado =
         (await md.reporte_dia.sum('valor', {
             where: {

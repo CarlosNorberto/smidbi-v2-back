@@ -5,6 +5,30 @@ const { notifyUsuarios } = require('../../services/whatsappNotificationService')
 // Listas del tablero (tasks_lists): 1 Pendientes, 2 En Proceso, 3 Terminado.
 const LIST_NAMES = { 1: 'Pendientes', 2: 'En Proceso', 3: 'Terminado' };
 
+// ---- Reglas de edición --------------------------------------------------------------------------------------------------
+// Editar (título, descripción, vencimiento, responsables, etiquetas, pieza de campaña) y eliminar una tarea es de quien la creó,
+// de un administrador, o de cualquiera si la tarea no tiene creador (las antiguas). Moverla de columna es de todos los que la ven.
+// La pantalla ya lo respeta; el servidor ahora también (antes cualquiera con acceso podía editar o borrar llamando a la API).
+// Se responde 400 y no 403: el cliente HTTP del frontend manda al login ante cualquier 403.
+const NAME_MAX = 200; // largo de la columna `name`
+const isAdminUser = (user) => ['admin', 'superadmin'].includes(user?.role?.rol);
+const canEditCard = (user, card) => !card.user_id || card.user_id === user.id || isAdminUser(user);
+const EDIT_DENIED = { message: 'Solo quien creó la tarea o un administrador puede editarla. Cualquiera con acceso puede moverla de columna.' };
+const DELETE_DENIED = { message: 'Solo quien creó la tarea o un administrador puede eliminarla.' };
+
+// Lista sin repetidos de { id } con ids enteros; null si no es un arreglo válido.
+const uniqueById = (items) => {
+    if (!Array.isArray(items)) return null;
+    const seen = new Map();
+    for (const item of items) {
+        const id = Number(item?.id);
+        if (!Number.isInteger(id) || id <= 0) return null;
+        if (!seen.has(id)) seen.set(id, { ...item, id });
+    }
+    return [...seen.values()];
+};
+const sameIds = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
 const getById = async (req, res) => {
     try {
         const id = req.params.id;
@@ -94,7 +118,30 @@ const getById = async (req, res) => {
 
 const save = async (req, res) => {
     try {
-        let body = req.body;
+        // Solo se toman los datos que corresponden a una tarea nueva: antes se guardaba el cuerpo completo y se podía fijar a
+        // mano el id, el creador, el inicio, etc.
+        const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+        if (!name) return res.status(400).json({ message: 'El nombre de la tarea es obligatorio.' });
+        if (name.length > NAME_MAX) return res.status(400).json({ message: `El nombre de la tarea no puede pasar de ${NAME_MAX} caracteres.` });
+        const listId = req.body.list_id === undefined || req.body.list_id === null ? 1 : parseInt(req.body.list_id, 10);
+        if (!Number.isInteger(listId) || !(await md.tasks_lists.findByPk(listId))) {
+            return res.status(400).json({ message: 'La columna indicada no existe.' });
+        }
+        if (!req.body.report_id || !(await md.reportes.findByPk(req.body.report_id, { attributes: ['id'] }))) {
+            return res.status(400).json({ message: 'El reporte indicado no existe.' });
+        }
+        const order = Number(req.body.order);
+        const description = typeof req.body.description === 'string' && req.body.description.trim() ? req.body.description : null;
+        const completed = listId === 3;
+        let body = {
+            name,
+            description,
+            report_id: req.body.report_id,
+            list_id: listId,
+            order: Number.isFinite(order) ? order : null,
+            completed,
+            date_completed: completed ? new Date() : null,
+        };
         body.user_id = req.user.id;
         // set exp_date_year, exp_date_month, exp_date_day, exp_time_hour, exp_time_minute to neext day every time create a card
         const nextDay = new Date();
@@ -137,7 +184,46 @@ const update = async (req, res) => {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
 
-        const { list_id, order, responsibles, tags, description, name } = req.body;
+        let { list_id, order, responsibles, tags, description, name } = req.body;
+
+        // ---- Validación ANTES de escribir nada: antes un dato inválido (responsable o etiqueta inexistente, columna que no existe)
+        // daba 500 cuando ya se habían guardado cambios a medias (historial, responsables quitados...).
+        const isOwner = canEditCard(req.user, card);
+        if (name !== undefined) {
+            name = typeof name === 'string' ? name.trim() : '';
+            if (!name) return res.status(400).json({ message: 'El nombre de la tarea no puede quedar vacío.' });
+            if (name.length > NAME_MAX) return res.status(400).json({ message: `El nombre de la tarea no puede pasar de ${NAME_MAX} caracteres.` });
+        }
+        if (list_id !== undefined && list_id !== null) {
+            const listNumber = parseInt(list_id, 10);
+            if (!Number.isInteger(listNumber) || !(await md.tasks_lists.findByPk(listNumber))) {
+                return res.status(400).json({ message: 'La columna indicada no existe.' });
+            }
+        }
+        if (responsibles !== undefined) {
+            responsibles = uniqueById(responsibles);
+            if (!responsibles) return res.status(400).json({ message: 'La lista de responsables no es válida.' });
+            const found = await md.usuarios.count({ where: { id: responsibles.map((r) => r.id) } });
+            if (found !== responsibles.length) return res.status(400).json({ message: 'Alguno de los responsables ya no existe.' });
+        }
+        if (tags !== undefined) {
+            tags = uniqueById(tags);
+            if (!tags) return res.status(400).json({ message: 'La lista de etiquetas no es válida.' });
+            const found = await md.tasks_tags.count({ where: { id: tags.map((t) => t.id) } });
+            if (found !== tags.length) return res.status(400).json({ message: 'Alguna de las etiquetas ya no existe.' });
+        }
+        // Quien no creó la tarea solo puede moverla de columna: si intenta cambiar otra cosa, se le explica (la pantalla le
+        // reenvía la tarea completa, así que solo cuenta lo que realmente cambia).
+        if (!isOwner) {
+            const EXP_FIELDS = ['exp_date_year', 'exp_date_month', 'exp_date_day', 'exp_time_hour', 'exp_time_minute'];
+            const changed =
+                (name !== undefined && name !== card.name)
+                || (description !== undefined && (description || null) !== (card.description || null))
+                || EXP_FIELDS.some((f) => req.body[f] !== undefined && Number(req.body[f]) !== Number(card[f]))
+                || (responsibles !== undefined && !sameIds(responsibles.map((r) => r.id), card.responsibles.map((r) => r.id)))
+                || (tags !== undefined && !sameIds(tags.map((t) => t.id), card.tags.map((t) => t.id)));
+            if (changed) return res.status(400).json(EDIT_DENIED);
+        }
 
         const isCompleted = parseInt(list_id) === 3;
 
@@ -159,13 +245,18 @@ const update = async (req, res) => {
             });
         }
 
-        const updateData = { ...req.body };
-        // Los tiempos los fija el servidor: no se aceptan del cliente.
-        delete updateData.created_at;
-        delete updateData.started_at;
-        delete updateData.last_notified_at;
-        delete updateData.completed;
-        delete updateData.date_completed;
+        // Solo se actualizan los datos propios de la tarea. Antes se guardaba el cuerpo completo: se podía cambiar el reporte
+        // (mover la tarea a un reporte ajeno), quién la creó o el id. Los tiempos (inicio, término, último aviso) los fija el
+        // servidor; `completed` y `date_completed` salen de la columna a la que pasa.
+        const updateData = {};
+        const EDITABLE = ['description', 'exp_date_year', 'exp_date_month', 'exp_date_day', 'exp_time_hour', 'exp_time_minute'];
+        // Quien no creó la tarea solo mueve de columna y reordena; el resto lo cambia únicamente el creador o un administrador.
+        if (isOwner) {
+            for (const field of EDITABLE) if (req.body[field] !== undefined) updateData[field] = req.body[field];
+            if (name !== undefined) updateData.name = name;
+        }
+        if (req.body.order !== undefined && Number.isFinite(Number(req.body.order))) updateData.order = Number(req.body.order);
+        if (list_id !== undefined && list_id !== null) updateData.list_id = parseInt(list_id, 10);
 
         // "Terminado" y su fecha solo cambian cuando la tarea cambia de columna: editar una tarea que ya está terminada
         // (título, responsables, etc.) no debe mover su fecha de término.
@@ -261,6 +352,19 @@ const update = async (req, res) => {
         }
 
         await card.update(updateData);
+
+        // La tarea se cargó ANTES de cambiar responsables y etiquetas: la respuesta debe traer las listas ya actualizadas (la
+        // pantalla las toma de aquí). Antes llegaban "de casualidad" porque se guardaba el cuerpo completo del pedido.
+        if (responsibles !== undefined || tags !== undefined) {
+            const fresh = await md.tasks_cards.scope(['withResponsibles', 'withTags']).findByPk(id);
+            card.dataValues.responsibles = fresh.responsibles;
+            card.dataValues.tags = fresh.tags;
+        }
+        // Igual que al abrir la tarea (getById): la pantalla guarda esta respuesta como "la tarea", y sin `objetivo_logrado` la
+        // Pieza de campaña mostraba "NaN" hasta volver a abrirla.
+        if (card.report) {
+            card.report.dataValues.objetivo_logrado = await getObjetivoLogrado(card.report.id, card.report.objetivo?.id);
+        }
 
         if(card.exp_date_year && card.exp_date_month && card.exp_date_day) {
             const expDate = new Date(card.exp_date_year, card.exp_date_month - 1, card.exp_date_day, card.exp_time_hour, card.exp_time_minute);
@@ -450,6 +554,7 @@ const remove = async (req, res) => {
         if (!card) {
             return res.status(404).json({ message: 'No se encontró la tarjeta' });
         }
+        if (!canEditCard(req.user, card)) return res.status(400).json(DELETE_DENIED);
         await card.destroy();
         return res.status(200).json({ message: 'Tarjeta eliminada correctamente' });
     } catch (error) {
@@ -458,6 +563,8 @@ const remove = async (req, res) => {
 };
 
 module.exports = {
+    canEditCard,
+    EDIT_DENIED,
     getById,
     save,
     update,
