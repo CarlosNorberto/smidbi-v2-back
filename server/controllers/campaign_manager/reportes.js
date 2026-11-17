@@ -818,20 +818,19 @@ const updateAllDaysByReportAndObjetivo = async (req, res) => {
 
 const updateReporteDia = async (req, res) => {
     try {
-        const { id, valor, id_reporte } = req.body;
+        const { id, valor, id_reporte, bloqueado, redistribute } = req.body;
         if (!Number.isInteger(Number(id)) || !Number.isFinite(Number(valor))) {
             return res.status(400).send({ message: 'El id y el valor del día deben ser numéricos.' });
         }
-        await md.reporte_dia.update(
-            {
-                valor: valor,
-            },
-            {
-                where: {
-                    id: id,
-                },
-            },
-        );
+        if (bloqueado !== undefined && typeof bloqueado !== 'boolean') {
+            return res.status(400).send({ message: 'El bloqueo del día no es válido.' });
+        }
+        const changes = { valor: valor };
+        if (bloqueado !== undefined) changes.bloqueado = bloqueado;
+        // La Redistribución nunca pisa un día bloqueado (aunque el cliente lo enviara por error); una edición manual sí puede cambiarlo.
+        const where = { id: id };
+        if (redistribute === true) where.bloqueado = { [md.Sequelize.Op.not]: true };
+        await md.reporte_dia.update(changes, { where });
         const reporte = await md.reportes.findByPk(id_reporte);
         // const total_valor = await updateKPI(reporte);
         res.status(200).send({
@@ -1924,7 +1923,7 @@ const reporteDiasReview = async (req, res) => {
                 model: md.reporte_dia,
                 as: 'reporte_dia',
                 // add attribute id_usuario from id_reporte.id_usuario
-                attributes: ['id', 'valor', 'dia', 'mes', 'anio', 'id_reporte'],
+                attributes: ['id', 'valor', 'dia', 'mes', 'anio', 'id_reporte', 'bloqueado'],
                 where: {
                     id_objetivo: md.sequelize.fn(
                         '',

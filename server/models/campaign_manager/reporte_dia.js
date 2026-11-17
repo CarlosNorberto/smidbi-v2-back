@@ -18,6 +18,8 @@ module.exports = (sequelize, DataTypes) => {
         media_cost:DataTypes.NUMERIC(12,2),
         rango_edad:DataTypes.INTEGER,
         genero:DataTypes.INTEGER,
+        // true = valor fijo: la Redistribución (Revisión de días) no lo modifica. NULL/false = libre.
+        bloqueado:DataTypes.BOOLEAN,
     }, {
         tableName:"reporte_dia",
         timestamps:false,
