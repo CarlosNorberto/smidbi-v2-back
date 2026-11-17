@@ -71,8 +71,8 @@ module.exports = (app) => {
 
     // OBJETIVOS SECUNDARIOS
     // KPI (objetivos secundarios) del reporte: ver/editar es exclusivo de admin y superadmin.
-    app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, requireRole('admin', 'superadmin'), reportes.getSecondaryObjectivesByReportId);
-    app.post(process.env.PREFIX_API + '/reports/secondary_objectives/save/:report_id', sessionAuth, requireRole('admin', 'superadmin'), reportes.saveUpdateSecondaryObjectives);
+    app.get(process.env.PREFIX_API + '/reports/secondary_objectives/:report_id', sessionAuth, requireRole('admin', 'superadmin', 'hidden'), reportes.getSecondaryObjectivesByReportId);
+    app.post(process.env.PREFIX_API + '/reports/secondary_objectives/save/:report_id', sessionAuth, requireRole('admin', 'superadmin', 'hidden'), reportes.saveUpdateSecondaryObjectives);
 
     // GENERO
     app.get(process.env.PREFIX_API + '/reports/gender/:report_id', sessionAuth, reportes.getGenderByReportId);

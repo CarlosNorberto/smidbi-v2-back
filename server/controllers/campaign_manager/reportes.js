@@ -778,6 +778,15 @@ const getDaysByReportId = async (req, res) => {
  * @param {Response} res
  * @return {Promise<void>}
  */
+// Un día bloqueado (reporte_dia.bloqueado) solo cambia de valor si quien escribe lo pide a propósito: un trigger de la base
+// (migración 20261117010000) conserva el valor en cualquier otro UPDATE, p. ej. el cron diario del backend antiguo. Las
+// ediciones hechas por una persona desde este sistema pasan por aquí, que avisa al trigger dentro de la transacción.
+const withManualDayEdit = (work) =>
+    md.sequelize.transaction(async (transaction) => {
+        await md.sequelize.query("SELECT set_config('smidbi.edicion_manual_dia', 'on', true)", { transaction });
+        return work(transaction);
+    });
+
 const updateAllDaysByReportAndObjetivo = async (req, res) => {
     try {
         const { report_id } = req.params;
@@ -791,20 +800,23 @@ const updateAllDaysByReportAndObjetivo = async (req, res) => {
                 .status(404)
                 .json({ message: 'No se encontró el reporte' });
         }
-        for (const day of days) {
-            await md.reporte_dia.update(
-                { valor: day.valor },
-                {
-                    where: {
-                        id_reporte: report_id,
-                        id_objetivo: report.id_objetivo,
-                        dia: day.dia,
-                        mes: day.mes,
-                        anio: day.anio,
+        await withManualDayEdit(async (transaction) => {
+            for (const day of days) {
+                await md.reporte_dia.update(
+                    { valor: day.valor },
+                    {
+                        where: {
+                            id_reporte: report_id,
+                            id_objetivo: report.id_objetivo,
+                            dia: day.dia,
+                            mes: day.mes,
+                            anio: day.anio,
+                        },
+                        transaction,
                     },
-                },
-            );
-        }
+                );
+            }
+        });
         res.status(200).send({
             message: 'Valores actualizados correctamente en reporte_dia.',
         });
@@ -830,7 +842,8 @@ const updateReporteDia = async (req, res) => {
         // La Redistribución nunca pisa un día bloqueado (aunque el cliente lo enviara por error); una edición manual sí puede cambiarlo.
         const where = { id: id };
         if (redistribute === true) where.bloqueado = { [md.Sequelize.Op.not]: true };
-        await md.reporte_dia.update(changes, { where });
+        // La Redistribución ya excluye los bloqueados en el where; la edición manual avisa al trigger para poder cambiarlos.
+        await withManualDayEdit((transaction) => md.reporte_dia.update(changes, { where, transaction }));
         const reporte = await md.reportes.findByPk(id_reporte);
         // const total_valor = await updateKPI(reporte);
         res.status(200).send({
@@ -2020,7 +2033,12 @@ const reporteDiasReview = async (req, res) => {
                     'sum_total',
                 ],
             ],
+            // Orden FIJO de los reportes: sin él, la consulta que elige "los N reportes de esta página" (LIMIT/OFFSET) no tenía ORDER BY y
+            // PostgreSQL los devolvía en un orden físico que cambia entre consultas (cualquier escritura en la tabla lo mueve): un reporte
+            // podía salir al final de una página y otra vez al inicio de la siguiente (y otro no salir nunca). El id desempata siempre.
             order: [
+                ['id_usuario', 'ASC'],
+                ['id', 'ASC'],
                 [{ model: md.reporte_dia, as: 'reporte_dia' }, 'anio', 'ASC'],
                 [{ model: md.reporte_dia, as: 'reporte_dia' }, 'mes', 'ASC'],
                 [{ model: md.reporte_dia, as: 'reporte_dia' }, 'dia', 'ASC'],
