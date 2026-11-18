@@ -101,3 +101,8 @@ LEGACY_SIGNED_CONTRACTS_PATH=/home/back-end/server/uploads/signed_contracts
 
 (Ajustar a la ruta real del servidor del sistema antiguo. Sin esta variable, los contratos firmados antiguos aparecen con "Descargar" deshabilitado.)
 
+- Acepta varias carpetas separadas por `;` (por si los archivos antiguos están repartidos).
+- **Permisos:** esta app y la antigua corren en el mismo servidor, pero cada una con su ruta y, quizá, con otro usuario de Linux. El usuario de ESTA app debe poder **entrar a cada carpeta de la ruta** (permiso `x`) y **leer** los archivos (`r`). Para revisarlo: `namei -l /ruta/a/signed_contracts/<archivo>` muestra los permisos de toda la ruta.
+- Tras agregar o cambiar la variable hay que **reiniciar** esta app (el `.env` no se recarga solo).
+- Si "Descargar" sigue deshabilitado, pasar el mouse por el botón: el aviso dice la causa (variable, carpeta, permiso o archivo) con la carpeta y el nombre del archivo; el mismo texto sale en el log del servidor al intentar descargar.
+
