@@ -43,6 +43,7 @@ module.exports = (app) => {
     // SIGNED CONTRACTS
     app.post(process.env.PREFIX_API + '/signed_contracts/upload/:contractId', ...access, uploadContract.single('file'), signed_contracts.uploadSignedContract);
     app.get(process.env.PREFIX_API + '/signed_contracts/signed/:contractId', ...access, signed_contracts.getSignedContracts);
+    app.get(process.env.PREFIX_API + '/signed_contracts/file/:id', ...access, signed_contracts.downloadSignedContract);
     app.delete(process.env.PREFIX_API + '/signed_contracts/signed/remove/:contractId', ...access, signed_contracts.removeSignedContract);
 
     // APPLICATION STATUS

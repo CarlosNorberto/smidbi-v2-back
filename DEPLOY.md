@@ -90,3 +90,14 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 El script hace `nvm install 20` solo si falta.
 
 **Importante:** el glibc del servidor es anterior a 2.28, así que el Node 20 oficial no arranca (`GLIBC_2.28 not found`). Se usa el build no oficial `glibc-217`; `deploy.sh` ya configura el mirror (`NVM_NODEJS_ORG_MIRROR=https://unofficial-builds.nodejs.org/download/release`) y `nvm_get_arch` para eso. Si alguna vez hay que reinstalarlo a mano: `nvm uninstall 20`, exportar esas dos cosas y `nvm install 20` (si queda instalado el oficial, `nvm install` dice "already installed" y no lo reemplaza).
+
+## Variable nueva: contratos firmados del sistema antiguo
+
+Agregar al `.env` de producción (carpeta donde el sistema antiguo guardó los contratos firmados; el backend nuevo los entrega solo con sesión):
+
+```
+LEGACY_SIGNED_CONTRACTS_PATH=/home/back-end/server/uploads/signed_contracts
+```
+
+(Ajustar a la ruta real del servidor del sistema antiguo. Sin esta variable, los contratos firmados antiguos aparecen con "Descargar" deshabilitado.)
+
