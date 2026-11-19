@@ -172,7 +172,10 @@ const generateContract = async (companyForm) => {
     });
     // extraer el año de la fecha de aplicación
     if (!contract) {
-        throw new Error('Contrato no encontrado con el CODIGO proporcionado');
+        // Formulario huérfano (sin contrato): hay datos así en la base, por pruebas o creaciones que fallaron a medias.
+        const error = new Error('Este formulario no tiene un contrato asociado, así que no se puede generar el documento.');
+        error.status = 404;
+        throw error;
     }    
 
     // 3. Reemplazar las variables (sin {{}} en las claves)    
@@ -197,6 +200,29 @@ const generateContract = async (companyForm) => {
     return buffer;
 }
 
+// Mensaje para el usuario según la causa del fallo al generar el contrato (antes todo salía como "Error generando
+// contrato" y solo el log del servidor decía qué pasaba). Devuelve null si no es una causa conocida.
+const describeContractError = (error) => {
+    const status = error?.response?.status ?? (typeof error?.code === 'number' ? error.code : null);
+    const text = String(error?.message ?? '');
+    if (error?.code === 'ENOENT' && /google-credentials/i.test(text)) {
+        return 'El servidor no tiene el archivo de credenciales de Google (google-credentials.json) que se necesita para generar contratos.';
+    }
+    if (/invalid_grant|invalid_client|DECODER routines|private key|Invalid JWT/i.test(text) || status === 401) {
+        return 'Las credenciales de Google del servidor no son válidas. Revise el archivo google-credentials.json.';
+    }
+    if (status === 403 || status === 404) {
+        return 'No se pudo leer la plantilla del contrato en Google Drive: no existe o la cuenta de servicio no tiene acceso a ella.';
+    }
+    if (['ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED'].includes(error?.code)) {
+        return 'No hay conexión con Google Drive desde el servidor. Intente de nuevo en unos minutos.';
+    }
+    if (error?.properties?.errors || error?.name === 'TemplateError') {
+        return 'La plantilla de Word tiene una variable mal escrita ({{ALCANCE}}, {{DURACION}} o {{CODIGO}}). Revise la plantilla.';
+    }
+    return null;
+};
+
 const downloadContract = async (req, res) => {
     try {
         const {companyFormId} = req.params;
@@ -217,7 +243,9 @@ const downloadContract = async (req, res) => {
     } catch (error) {
         console.error(error);
         // La petición se hace como "blob": el frontend lee `message` de la respuesta si viene en JSON.
-        res.status(error.status || 500).json({ message: error.status ? error.message : 'Error generando contrato' });
+        res.status(error.status || 500).json({
+            message: error.status ? error.message : (describeContractError(error) || 'Error generando contrato'),
+        });
     }
 }
 
@@ -226,5 +254,6 @@ module.exports = {
     create,
     update,
     remove,
-    downloadContract
+    downloadContract,
+    describeContractError,
 }

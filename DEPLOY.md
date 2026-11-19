@@ -106,3 +106,9 @@ LEGACY_SIGNED_CONTRACTS_PATH=/home/back-end/server/uploads/signed_contracts
 - Tras agregar o cambiar la variable hay que **reiniciar** esta app (el `.env` no se recarga solo).
 - Si "Descargar" sigue deshabilitado, pasar el mouse por el botón: el aviso dice la causa (variable, carpeta, permiso o archivo) con la carpeta y el nombre del archivo; el mismo texto sale en el log del servidor al intentar descargar.
 
+## Node 16 en producción: librerías fijadas (no subirlas sin probar)
+
+El backend corre en Node 16 (pm2; el Node 20 del servidor es solo para compilar el frontend). Las versiones recientes de varias librerías exigen Node 18 o superior y usan APIs que Node 16 no tiene (`Headers`, `fetch`, `Blob`), así que fallan solo en producción con `ReferenceError: Headers is not defined`. Por eso están **fijadas a una versión exacta** en `package.json`:
+- `openai` en 4.x (la 5 en adelante exige Node 18).
+- `googleapis` **148.0.0** y `google-auth-library` **9.15.1** (engines `>=14`; el generador de contratos usa Google Drive). La 155 en adelante de `googleapis` y la 10 de `google-auth-library` exigen Node 18 y rompían "Generar contrato". Se fijaron juntas: no mezclar la 9 con la 10.
+- **Antes de subir una de estas versiones:** mirar `engines` (`npm view <paquete>@<versión> engines.node`) y probar emulando Node 16 (en Node 22: `for (const k of ['Headers','Request','Response','fetch','Blob','FormData','File']) delete globalThis[k]` antes de cargar el código). Si algún día el backend pasa a Node 20, estas fijaciones se pueden quitar.
